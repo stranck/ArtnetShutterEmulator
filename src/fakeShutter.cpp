@@ -2,6 +2,7 @@
 
 #include <sys/param.h>
 #include "artnet.h"
+#include "sacn.h"
 #include "esp_log.h"
 #include "esp_timer.h"
 #include "periodic_task.h"
@@ -102,7 +103,13 @@ static void runShutterTick(void *ctx) {
     for (int i = 0; i < _universeCount; i++) {
         DmxUniverse *uni = _universes[i];
         if (uni->dirty) {
-            artnet_send_dmx(uni->outUniId, uni->data, 512, uni->outAddr);
+            struct in_addr *addr = &uni->outAddr;
+            if (addr->s_addr == 0) addr = NULL;
+            if (uni->isArtnetOut) {
+                artnet_send_dmx(uni->outUniId, uni->data, 512, uni->sequenceNo, addr);
+            } else {
+                sacn_send_dmx(uni->outUniId, uni->sequenceNo, uni->data, 512, addr);
+            }
             uni->dirty = false;
         }
     }
@@ -132,6 +139,9 @@ void initFakeShutter(esp_netif_t *eth){
     artnet_cfg.short_name = "ShutterEmulator";
     artnet_cfg.long_name  = "ShutterEmulator - ESP32-S3-ETH Art-Net node";
     ESP_ERROR_CHECK(artnet_init(&artnet_cfg, onArtnetReceive));
+
+    sacn_config_t sacn_cfg = SACN_DEFAULT_CONFIG("ShutterEmulator");
+    ESP_ERROR_CHECK(sacn_init(&sacn_cfg));
 
     periodic_task_config_t cfg = PERIODIC_TASK_DEFAULT_CONFIG("shutterTick", 3000, runShutterTick, NULL);
     ESP_ERROR_CHECK(periodic_task_start(&cfg, &shutterTick_task));
@@ -244,7 +254,7 @@ void reallocShutters(UniverseAddressPair *sourceValues, UniverseAddressPair **de
 }
 
 
-void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr* universesOutAddr, int count) {
+void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr* universesOutAddr, bool* isArtnetOut, int count) {
     xSemaphoreTakeRecursive(configSemaphore, portMAX_DELAY);
     //Deallocate old
     int oldUniCount = _universeCount;
@@ -281,6 +291,7 @@ void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr
         universes[i]->universeId = universesInId[minIndex];
         universes[i]->outAddr = universesOutAddr[minIndex];
         universes[i]->outUniId = universesOutId[minIndex];
+        universes[i]->isArtnetOut = isArtnetOut[minIndex];
     }
     _universes = universes;
     _universeCount = count;

@@ -39,7 +39,7 @@ esp_err_t artnet_init(const artnet_config_t *cfg, artnet_dmx_cb_t on_dmx);
 //   dest_ip : e.g. "192.168.1.100" (unicast) or "192.168.1.255" (broadcast)
 //   length  : 1..512 (odd lengths are padded with one zero byte, as the spec requires)
 // Safe to call from any task.
-esp_err_t artnet_send_dmx(uint16_t universe, const uint8_t *data, uint16_t length, const struct in_addr &dest_ip);
+esp_err_t artnet_send_dmx(uint16_t universe, const uint8_t *data, uint16_t length, uint8_t seqNo, struct in_addr *dest_ip);
 
 // Broadcast an unsolicited ArtPollReply (e.g. at startup, or after a config change)
 // so controllers notice the node without waiting for their next ArtPoll.

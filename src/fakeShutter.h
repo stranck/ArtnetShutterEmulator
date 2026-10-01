@@ -11,6 +11,7 @@ typedef struct {
     bool dirty;
     uint16_t outUniId;
     struct in_addr outAddr;
+    bool isArtnetOut;
     uint8_t data[512];
 } DmxUniverse;
 
@@ -40,6 +41,6 @@ void initFakeShutter(esp_netif_t *eth);
 
 void setFramerate(int frameRate);
 
-void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr* universesOutAddr, int count);
+void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr* universesOutAddr, bool* isArtnetOut, int count);
 
 void reallocShutters(UniverseAddressPair *sourceValues, UniverseAddressPair **destValues, int *destValuesCount, int count);

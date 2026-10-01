@@ -39,7 +39,6 @@ static int               s_sock = -1;
 static artnet_dmx_cb_t   s_on_dmx = NULL;
 static SemaphoreHandle_t s_tx_lock = NULL;
 static StaticSemaphore_t s_buffer;
-static uint8_t           s_tx_seq = 0;
 
 static artnet_config_t   s_cfg;
 static char              s_short_name[18];
@@ -169,6 +168,18 @@ static void artnet_rx_task(void *arg)
     }
 }
 
+static esp_err_t get_broadcast_ip(esp_netif_t *netif, struct in_addr *out)
+{
+    if (!netif || !out) return ESP_ERR_INVALID_ARG;
+
+    esp_netif_ip_info_t info;
+    esp_err_t err = esp_netif_get_ip_info(netif, &info);
+    if (err != ESP_OK) return err;
+
+    out->s_addr = info.ip.addr | ~info.netmask.addr;
+    return ESP_OK;
+}
+
 // ---------- public API ----------
 
 esp_err_t artnet_init(const artnet_config_t *cfg, artnet_dmx_cb_t on_dmx)
@@ -228,8 +239,7 @@ esp_err_t artnet_announce(void)
     return send_poll_reply(bcast);
 }
 
-esp_err_t artnet_send_dmx(uint16_t universe, const uint8_t *data, uint16_t length,
-                          const struct in_addr &dest_ip)
+esp_err_t artnet_send_dmx(uint16_t universe, const uint8_t *data, uint16_t length, uint8_t seqNo, struct in_addr *dest_ip)
 {
     if (s_sock < 0) return ESP_ERR_INVALID_STATE;
     if (!data || length < 1 || length > ARTNET_MAX_DMX) return ESP_ERR_INVALID_ARG;
@@ -248,10 +258,12 @@ esp_err_t artnet_send_dmx(uint16_t universe, const uint8_t *data, uint16_t lengt
     memcpy(pkt + DMX_HEADER_LEN, data, length);
     if (wire_len != length) pkt[DMX_HEADER_LEN + length] = 0;
 
-    // 1..255, 0 means "no sequencing". Not under the TX lock, but a rare
-    // duplicate sequence number between two sending tasks is harmless.
-    s_tx_seq = (s_tx_seq == 255) ? 1 : s_tx_seq + 1;
-    pkt[12] = s_tx_seq;
+    pkt[12] = seqNo;
 
-    return send_raw(pkt, DMX_HEADER_LEN + wire_len, dest_ip.s_addr);
+    if(dest_ip == NULL) {
+        dest_ip = (struct in_addr*) alloca(sizeof(struct in_addr*));
+        get_broadcast_ip(s_cfg.netif, dest_ip);
+    }
+
+    return send_raw(pkt, DMX_HEADER_LEN + wire_len, dest_ip->s_addr);
 }
