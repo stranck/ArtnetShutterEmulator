@@ -7,7 +7,8 @@
 
 typedef struct {
     uint16_t universeId;
-    uint8_t sequenceNo;
+    uint8_t sequenceNo;     // last input sequence (Art-Net)
+    uint8_t outSequenceNo;  // sequence of the frames we send
     bool dirty;
     uint16_t outUniId;
     struct in_addr outAddr;

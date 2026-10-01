@@ -1,0 +1,1108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Shutter Emulator</title>
+<style>
+:root{
+  --bg:#0f1114; --panel:#171a1f; --panel2:#1f2329; --line:#2b3038; --text:#e7e9ec; --muted:#8a929d;
+  --accent:#f5a524; --accent-ink:#1b1305; --err:#ff6161; --err-bg:rgba(255,97,97,.13);
+  --warn:#e9c84a; --warn-bg:rgba(233,200,74,.11); --ok:#4cc38a; --sel:rgba(245,165,36,.13);
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;background:var(--bg);color:var(--text)}
+body{font:14px/1.4 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+header{position:sticky;top:0;z-index:20;background:var(--panel);border-bottom:1px solid var(--line);
+  display:flex;align-items:stretch;gap:18px;padding:0 16px;min-height:50px;flex-wrap:wrap}
+.brand{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.02em;white-space:nowrap}
+.brand i{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+.brand i.off{background:var(--err);box-shadow:0 0 10px var(--err)}
+nav{display:flex;gap:2px}
+nav button{background:none;border:0;border-bottom:2px solid transparent;color:var(--muted);
+  padding:0 14px;font:inherit;cursor:pointer;position:relative}
+nav button:hover{color:var(--text)}
+nav button.active{color:var(--text);border-bottom-color:var(--accent)}
+nav button.dirty::after{content:"";position:absolute;top:13px;right:3px;width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.hstatus{margin-left:auto;display:flex;align-items:center;gap:14px;color:var(--muted);font:12px var(--mono);flex-wrap:wrap}
+.hstatus button{font-family:inherit}
+main{padding:16px 16px 0;max-width:1400px;margin:0 auto}
+section{display:none}
+section.active{display:block}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:14px}
+.card h2{margin:0 0 12px;font-size:12px;text-transform:uppercase;letter-spacing:.09em;color:var(--muted);font-weight:600}
+.row{display:flex;gap:14px;flex-wrap:wrap;align-items:flex-end}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:5px 7px;font:inherit;min-width:0}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent);width:15px;height:15px;cursor:pointer}
+input.n3{width:58px} input.n5{width:80px} input.ip{width:140px}
+.mono,input.mono{font-family:var(--mono)}
+.bad{border-color:var(--err)!important;background:var(--err-bg)!important}
+.wrn{border-color:var(--warn)!important}
+button.b{background:var(--panel2);border:1px solid var(--line);color:var(--text);border-radius:5px;padding:6px 12px;font:inherit;cursor:pointer;white-space:nowrap}
+button.b:hover:not(:disabled){border-color:var(--muted)}
+button.b:disabled{opacity:.4;cursor:not-allowed}
+button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:600}
+button.primary:hover:not(:disabled){filter:brightness(1.08);border-color:var(--accent)}
+button.danger:hover:not(:disabled){border-color:var(--err);color:var(--err)}
+button.x{padding:3px 8px;color:var(--muted)}
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;font-weight:600;font-size:12px;color:var(--muted);padding:6px;border-bottom:1px solid var(--line);white-space:nowrap}
+td{padding:4px 6px;border-bottom:1px solid var(--line);vertical-align:middle}
+th.grp{text-align:center;border-bottom:1px solid var(--line)}
+td.sum{color:var(--muted);font:12px var(--mono);white-space:nowrap}
+.sub3{display:flex;gap:4px;align-items:center}
+.sub3 span{color:var(--muted);font-size:11px}
+tr.sel td{background:var(--sel)}
+td.idx{color:var(--muted);font:12px var(--mono);cursor:pointer;user-select:none;text-align:right;width:44px}
+td.idx:hover{color:var(--text)}
+td.cnt{color:var(--muted);font:12px var(--mono);text-align:right;width:36px}
+td.flag{width:24px;text-align:center}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%}
+.dot.e{background:var(--err)} .dot.w{background:var(--warn)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.spacer{flex:1}
+.hint{color:var(--muted);font-size:12px}
+.hint code{font-family:var(--mono);color:var(--text);background:var(--panel2);padding:0 4px;border-radius:3px}
+.issues{list-style:none;margin:0;padding:0;font-size:13px;max-height:180px;overflow:auto}
+.issues li{padding:2px 0;display:flex;gap:8px;align-items:baseline}
+.issues li.e{color:var(--err)} .issues li.w{color:var(--warn)}
+.issues li a{color:inherit;cursor:pointer;text-decoration:underline dotted}
+.empty{color:var(--muted);text-align:center;padding:22px}
+.savebar{position:sticky;bottom:0;z-index:10;background:var(--panel);border-top:1px solid var(--line);
+  margin:0 -16px;padding:10px 16px;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.savebar .msg{font-size:13px;color:var(--muted)}
+.savebar .msg.e{color:var(--err)}
+.grid2{display:grid;grid-template-columns:repeat(auto-fit,minmax(330px,1fr));gap:14px}
+.panel-sub{border-top:1px dashed var(--line);margin-top:12px;padding-top:12px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:6px 16px;font-size:13px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;font-family:var(--mono)}
+#toast{position:fixed;left:50%;bottom:76px;transform:translateX(-50%);z-index:50;display:flex;flex-direction:column;gap:6px;align-items:center;pointer-events:none}
+#toast div{background:var(--panel2);border:1px solid var(--line);border-left:3px solid var(--ok);padding:8px 14px;border-radius:6px;box-shadow:0 6px 24px rgba(0,0,0,.4);max-width:90vw}
+#toast div.e{border-left-color:var(--err)}
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);z-index:40;display:none;align-items:center;justify-content:center;padding:16px}
+.overlay.show{display:flex}
+.overlay .card{max-width:460px;width:100%;margin:0}
+.overlay a{color:var(--accent)}
+@media (max-width:700px){ header{gap:8px} .hstatus{margin-left:0;padding-bottom:6px} }
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><i id="liveDot"></i>Shutter Emulator</div>
+  <nav>
+    <button data-tab="io" class="active">Inputs &amp; outputs</button>
+    <button data-tab="shutters">Shutters</button>
+    <button data-tab="network">Network</button>
+  </nav>
+  <div class="hstatus">
+    <span id="hdrInfo">connecting…</span>
+    <button class="b x" id="btnExport" title="Download the configuration stored on the device">Backup</button>
+    <button class="b x" id="btnImport" title="Load a backup into the editors (review, then save each tab)">Restore</button>
+    <input type="file" id="importFile" accept=".json,application/json" hidden>
+  </div>
+</header>
+
+<main>
+<!-- ======================= INPUTS & OUTPUTS ======================= -->
+<section id="tab-io" class="active">
+  <div class="card">
+    <h2>Global</h2>
+    <div class="row">
+      <label class="f">Output framerate (fps)<input id="ioFramerate" class="n5 mono" type="number" min="1" max="200"></label>
+      <label class="f">sACN priority (0–200)<input id="ioPriority" class="n5 mono" type="number" min="0" max="200"></label>
+      <span class="hint">Framerate limits how often processed universes are sent. sACN priority applies to every sACN output.</span>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>Universes</h2>
+    <div class="tablewrap">
+    <table id="ioTable">
+      <thead>
+        <tr>
+          <th></th>
+          <th class="grp" colspan="1">Art-Net input (Net · Sub · Uni)</th>
+          <th>Count</th>
+          <th>Output</th>
+          <th>Output universe</th>
+          <th>Destination IP</th>
+          <th>Mapping</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+    <div class="toolbar" style="margin-top:10px;margin-bottom:0">
+      <button class="b" id="ioAdd">+ Add row</button>
+      <span class="hint">Leave the IP empty to broadcast (Art-Net) or multicast (sACN). "Count" maps that many consecutive universes.</span>
+    </div>
+  </div>
+
+  <div class="card" id="ioIssuesCard" hidden>
+    <h2>Problems</h2>
+    <ul class="issues" id="ioIssues"></ul>
+  </div>
+
+  <div class="savebar">
+    <button class="b primary" id="ioSave">Save &amp; apply</button>
+    <button class="b" id="ioRevert">Discard changes</button>
+    <span class="msg" id="ioMsg"></span>
+  </div>
+</section>
+
+<!-- ======================= SHUTTERS ======================= -->
+<section id="tab-shutters">
+  <div class="grid2">
+    <div class="card">
+      <h2>Edit selected <span id="selCount" class="hint"></span></h2>
+      <div class="row">
+        <label class="f">Name<input id="beName" placeholder="unchanged"></label>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px;padding-bottom:6px"><input type="checkbox" id="beNumber" checked>number from</label>
+        <label class="f">&nbsp;<input id="beNumberStart" class="n3 mono" type="number" value="1"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <label class="f">Source (first)<input id="beSrc" class="mono" style="width:100px" placeholder="e.g. 0.001"></label>
+        <label class="f">Destinations (first)<input id="beDst" class="mono" style="width:220px" placeholder="e.g. 0.004-0.006 0.010"></label>
+        <label class="f">Step (channels)<input id="beStep" class="n3 mono" type="number" value="16"></label>
+      </div>
+      <div class="row" style="margin-top:10px">
+        <button class="b primary" id="beApply" disabled>Apply to selected</button>
+        <span class="hint" id="bePreview"></span>
+      </div>
+      <div class="panel-sub row">
+        <label class="f">Shift by (channels)<input id="shAmount" class="n5 mono" type="number" value="512"></label>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px;padding-bottom:6px"><input type="checkbox" id="shSrc" checked>source</label>
+        <label class="f" style="flex-direction:row;align-items:center;gap:6px;padding-bottom:6px"><input type="checkbox" id="shDst" checked>destinations</label>
+        <button class="b" id="shApply" disabled>Shift selected</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">Empty fields are left unchanged. Row <i>k</i> of the selection gets <i>value + k × step</i>, crossing into the next universe after .512 (512 = one universe).</p>
+    </div>
+
+    <div class="card">
+      <h2>Duplicate selected</h2>
+      <div class="row">
+        <label class="f">Copies<input id="dupCount" class="n3 mono" type="number" min="1" max="512" value="1"></label>
+        <label class="f">Offset per copy (channels)<input id="dupOffset" class="n5 mono" type="number" value="16"></label>
+        <button class="b primary" id="dupApply" disabled>Duplicate</button>
+      </div>
+      <p class="hint" style="margin:10px 0 0">The copies are inserted after the selection, with every source and destination moved by the offset. Names ending in a number keep counting. The offset is pre-filled with the footprint of the selection.</p>
+      <div class="panel-sub">
+        <h2 style="margin-bottom:6px">Channel format</h2>
+        <p class="hint" style="margin:0"><code>universe.address</code>, e.g. <code>0.001</code> or <code>17.120</code>. Universe = Art-Net Port-Address of an input universe. Destinations: separate with spaces or commas, ranges with <code>-</code> or <code>thru</code> (<code>0.002-0.004</code>).</p>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="toolbar">
+      <button class="b" id="shAdd">+ Add shutter</button>
+      <button class="b danger" id="shDelete" disabled>Delete selected</button>
+      <button class="b" id="shSelNone">Clear selection</button>
+      <span class="spacer"></span>
+      <span class="hint">Click # to select · Shift-click for a range · Ctrl/⌘-click to add</span>
+    </div>
+    <div class="tablewrap">
+    <table id="shTable">
+      <thead>
+        <tr>
+          <th style="width:28px"><input type="checkbox" id="shSelAll" title="Select all"></th>
+          <th style="text-align:right">#</th>
+          <th style="width:18%">Name</th>
+          <th style="width:110px">Source</th>
+          <th>Destinations</th>
+          <th style="text-align:right">Ch</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+    </div>
+  </div>
+
+  <div class="card" id="shIssuesCard" hidden>
+    <h2>Problems</h2>
+    <ul class="issues" id="shIssues"></ul>
+  </div>
+
+  <div class="savebar">
+    <button class="b primary" id="shSave">Save &amp; apply</button>
+    <button class="b" id="shRevert">Discard changes</button>
+    <span class="msg" id="shMsg"></span>
+  </div>
+</section>
+
+<!-- ======================= NETWORK ======================= -->
+<section id="tab-network">
+  <div class="grid2">
+    <div class="card">
+      <h2>IP configuration</h2>
+      <div class="row">
+        <label class="f">IP address<input id="netIp" class="ip mono"></label>
+        <label class="f">Netmask<input id="netMask" class="ip mono"></label>
+        <label class="f">Gateway (optional)<input id="netGw" class="ip mono"></label>
+      </div>
+      <ul class="issues" id="netIssues" style="margin-top:10px"></ul>
+      <p class="hint" style="margin:10px 0 0">The new address is applied right after saving and the page moves to it.
+        Locked out? While the device is running, hold its <b>BOOT</b> button for 5 seconds: it switches back to the factory address <span class="mono">2.0.3.1 / 255.0.0.0</span>.</p>
+    </div>
+    <div class="card">
+      <h2>Device</h2>
+      <dl class="kv">
+        <dt>Current IP</dt><dd id="stIp">–</dd>
+        <dt>MAC</dt><dd id="stMac">–</dd>
+        <dt>Uptime</dt><dd id="stUptime">–</dd>
+        <dt>Free memory</dt><dd id="stHeap">–</dd>
+      </dl>
+    </div>
+  </div>
+  <div class="savebar">
+    <button class="b primary" id="netSave">Save &amp; apply</button>
+    <button class="b" id="netRevert">Discard changes</button>
+    <span class="msg" id="netMsg"></span>
+  </div>
+</section>
+</main>
+
+<div class="overlay" id="moveOverlay">
+  <div class="card">
+    <h2>Changing address</h2>
+    <p>The device is moving to <a id="moveLink" class="mono" href="#"></a>.</p>
+    <p class="hint">Make sure this computer is in the same subnet, otherwise the page will not be reachable.</p>
+    <p class="hint" id="moveCountdown"></p>
+    <div class="row"><button class="b" id="moveClose">Stay here</button></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+"use strict";
+// ======================================================================
+// Helpers
+// ======================================================================
+const $ = (s, el = document) => el.querySelector(s);
+const $$ = (s, el = document) => Array.from(el.querySelectorAll(s));
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const clone = o => JSON.parse(JSON.stringify(o));
+const MAX_ABS = 32767 * 512 + 511;
+
+function toast(text, isErr) {
+  const d = document.createElement("div");
+  d.textContent = text;
+  if (isErr) d.className = "e";
+  $("#toast").appendChild(d);
+  setTimeout(() => d.remove(), isErr ? 6000 : 3000);
+}
+
+async function api(path, body) {
+  const opt = body === undefined ? {} :
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) };
+  let r;
+  try { r = await fetch(path, opt); }
+  catch (e) { throw new Error("device not reachable"); }
+  let j = null;
+  try { j = await r.json(); } catch (e) { /* not JSON */ }
+  if (!r.ok) throw new Error((j && j.error) || ("HTTP " + r.status));
+  return j;
+}
+
+// ---- DMX channels: [universe, address] with address 1..512 ----
+const fmtChan = c => c ? `${c[0]}.${String(c[1]).padStart(3, "0")}` : "";
+const absOf = c => c[0] * 512 + c[1] - 1;
+const fromAbs = n => (Number.isInteger(n) && n >= 0 && n <= MAX_ABS) ? [Math.floor(n / 512), n % 512 + 1] : null;
+
+function parseChan(s) {
+  const m = /^(\d{1,5})[.\/:](\d{1,3})$/.exec(String(s).trim());
+  if (!m) return null;
+  const u = +m[1], a = +m[2];
+  if (u > 32767 || a < 1 || a > 512) return null;
+  return [u, a];
+}
+
+// "0.002 0.004-0.006, 1.010 thru 1.012" -> list of channels. Returns {list} or {bad}
+function parseChanList(s) {
+  const text = String(s).replace(/\s+thru\s+/gi, "-").trim();
+  if (!text) return { list: [] };
+  const list = [];
+  for (const tok of text.split(/[\s,;]+/).filter(Boolean)) {
+    const range = tok.split("-");
+    if (range.length === 1) {
+      const c = parseChan(tok);
+      if (!c) return { bad: tok };
+      list.push(c);
+    } else if (range.length === 2) {
+      const a = parseChan(range[0]), b = parseChan(range[1]);
+      if (!a || !b || absOf(b) < absOf(a)) return { bad: tok };
+      if (absOf(b) - absOf(a) >= 64) return { bad: tok + " (range too long)" };
+      for (let n = absOf(a); n <= absOf(b); n++) list.push(fromAbs(n));
+    } else return { bad: tok };
+  }
+  return { list };
+}
+
+// [[0,2],[0,3],[0,4],[0,9]] -> "0.002-0.004 0.009"
+function fmtChanList(list) {
+  const out = [];
+  for (let i = 0; i < list.length;) {
+    let j = i;
+    while (j + 1 < list.length && absOf(list[j + 1]) === absOf(list[j]) + 1) j++;
+    out.push(j - i >= 2 ? `${fmtChan(list[i])}-${fmtChan(list[j])}` : list.slice(i, j + 1).map(fmtChan).join(" "));
+    i = j + 1;
+  }
+  return out.join(" ");
+}
+
+const intIn = (v, min, max) => Number.isInteger(v) && v >= min && v <= max;
+const readInt = el => (el.value.trim() === "" ? NaN : Number(el.value));
+
+function parseIp(s) {
+  const m = /^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/.exec(String(s).trim());
+  if (!m) return null;
+  const p = m.slice(1).map(Number);
+  if (p.some(x => x > 255)) return null;
+  return ((p[0] << 24) | (p[1] << 16) | (p[2] << 8) | p[3]) >>> 0;
+}
+const ipStr = n => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join(".");
+
+// ======================================================================
+// State
+// ======================================================================
+const S = {
+  saved: null,          // last configuration loaded from / saved to the device
+  io: null,             // { framerate, sacnPriority, universes: [...] }  (editor)
+  sh: [],               // [{ name, srcText, dstText }]                    (editor)
+  net: null,            // { ip, netmask, gateway }                        (editor)
+  sel: new Set(),       // selected shutter indexes
+  anchor: null,         // last clicked shutter index (for shift-click)
+  ioErrors: 0, shErrors: 0, netErrors: 0,
+};
+
+function shutterToEditor(s) { return { name: s.name || "", srcText: fmtChan(s.src), dstText: fmtChanList(s.dst || []) }; }
+function shutterFromEditor(r) {
+  const src = parseChan(r.srcText), dst = parseChanList(r.dstText);
+  return { name: r.name.trim(), src, dst: dst.list || [] };
+}
+
+function loadEditors(cfg, which = ["io", "sh", "net"]) {
+  if (which.includes("io")) S.io = { framerate: cfg.framerate, sacnPriority: cfg.sacnPriority, universes: clone(cfg.universes || []) };
+  if (which.includes("sh")) { S.sh = (cfg.shutters || []).map(shutterToEditor); S.sel.clear(); S.anchor = null; }
+  if (which.includes("net")) S.net = clone(cfg.network || { ip: "", netmask: "", gateway: "" });
+}
+
+// Payloads exactly as the device API expects them
+const ioPayload = () => ({ framerate: S.io.framerate, sacnPriority: S.io.sacnPriority, universes: S.io.universes });
+const shPayload = () => ({ shutters: S.sh.map(shutterFromEditor) });
+const netPayload = () => ({ network: { ip: S.net.ip.trim(), netmask: S.net.netmask.trim(), gateway: S.net.gateway.trim() } });
+
+function isDirty(tab) {
+  if (!S.saved) return false;
+  if (tab === "io") return JSON.stringify(ioPayload()) !== JSON.stringify({ framerate: S.saved.framerate, sacnPriority: S.saved.sacnPriority, universes: S.saved.universes });
+  if (tab === "shutters") return JSON.stringify(shPayload().shutters) !== JSON.stringify(S.saved.shutters.map(s => ({ name: s.name, src: s.src, dst: s.dst })));
+  if (tab === "network") return JSON.stringify(netPayload().network) !== JSON.stringify(S.saved.network);
+  return false;
+}
+function refreshDirty() {
+  for (const b of $$("nav button")) b.classList.toggle("dirty", isDirty(b.dataset.tab));
+}
+
+// ======================================================================
+// Tabs
+// ======================================================================
+function showTab(name) {
+  for (const b of $$("nav button")) b.classList.toggle("active", b.dataset.tab === name);
+  for (const s of $$("main > section")) s.classList.toggle("active", s.id === "tab-" + name);
+  try { localStorage.setItem("tab", name); } catch (e) { }
+}
+$("nav").addEventListener("click", e => { const b = e.target.closest("button"); if (b) showTab(b.dataset.tab); });
+const activeTab = () => $("nav button.active").dataset.tab;
+
+// ======================================================================
+// Inputs & outputs
+// ======================================================================
+const splitPA = pa => Number.isInteger(pa) ? [pa >> 8, (pa >> 4) & 15, pa & 15] : ["", "", ""];
+const numOrEmpty = v => Number.isInteger(v) ? v : "";
+const joinPA = (n, s, u) => (n << 8) | (s << 4) | u;
+
+function ioRowHtml(r, i) {
+  const [inN, inS, inU] = splitPA(r.in);
+  const outCell = r.proto === "artnet"
+    ? (() => { const [n, s, u] = splitPA(r.out); return `<div class="sub3">
+        <input class="n3 mono" data-f="outN" type="number" min="0" max="127" value="${n}"><span>·</span>
+        <input class="n3 mono" data-f="outS" type="number" min="0" max="15" value="${s}"><span>·</span>
+        <input class="n3 mono" data-f="outU" type="number" min="0" max="15" value="${u}"></div>`; })()
+    : `<input class="n5 mono" data-f="outSacn" type="number" min="1" max="63999" value="${numOrEmpty(r.out)}">`;
+  return `<tr data-i="${i}">
+    <td class="cnt">${i + 1}</td>
+    <td><div class="sub3">
+      <input class="n3 mono" data-f="inN" type="number" min="0" max="127" value="${inN}"><span>·</span>
+      <input class="n3 mono" data-f="inS" type="number" min="0" max="15" value="${inS}"><span>·</span>
+      <input class="n3 mono" data-f="inU" type="number" min="0" max="15" value="${inU}"></div></td>
+    <td><input class="n3 mono" data-f="count" type="number" min="1" max="256" value="${numOrEmpty(r.count)}"></td>
+    <td><select data-f="proto"><option value="artnet"${r.proto === "artnet" ? " selected" : ""}>Art-Net</option><option value="sacn"${r.proto === "sacn" ? " selected" : ""}>sACN</option></select></td>
+    <td>${outCell}</td>
+    <td><input class="ip mono" data-f="addr" value="${esc(r.addr || "")}" placeholder="${r.proto === "artnet" ? "broadcast" : "multicast"}"></td>
+    <td class="sum"></td>
+    <td><button class="b x danger" data-act="del" title="Remove row">✕</button></td>
+  </tr>`;
+}
+
+function renderIo() {
+  $("#ioFramerate").value = S.io.framerate;
+  $("#ioPriority").value = S.io.sacnPriority;
+  const tb = $("#ioTable tbody");
+  tb.innerHTML = S.io.universes.length
+    ? S.io.universes.map(ioRowHtml).join("")
+    : `<tr><td colspan="8" class="empty">No universes yet. Add a row to start processing Art-Net input.</td></tr>`;
+  validateIo();
+}
+
+// Read one row's inputs back into the model (NaN for invalid fields)
+function readIoRow(tr) {
+  const r = S.io.universes[+tr.dataset.i];
+  const v = f => { const el = $(`[data-f="${f}"]`, tr); return el ? readInt(el) : NaN; };
+  const inN = v("inN"), inS = v("inS"), inU = v("inU");
+  r.in = (intIn(inN, 0, 127) && intIn(inS, 0, 15) && intIn(inU, 0, 15)) ? joinPA(inN, inS, inU) : NaN;
+  r.count = v("count");
+  r.proto = $('[data-f="proto"]', tr).value;
+  if (r.proto === "artnet") {
+    const n = v("outN"), s = v("outS"), u = v("outU");
+    r.out = (intIn(n, 0, 127) && intIn(s, 0, 15) && intIn(u, 0, 15)) ? joinPA(n, s, u) : NaN;
+  } else r.out = v("outSacn");
+  r.addr = $('[data-f="addr"]', tr).value.trim();
+}
+
+function validateIo() {
+  const issues = [];
+  const rows = S.io.universes;
+  const trs = $$("#ioTable tbody tr[data-i]");
+  for (const el of $$("#tab-io input, #tab-io select")) el.classList.remove("bad", "wrn");
+
+  const fr = S.io.framerate, pr = S.io.sacnPriority;
+  if (!intIn(fr, 1, 200)) { issues.push(["e", "Framerate must be 1–200 fps"]); $("#ioFramerate").classList.add("bad"); }
+  if (!intIn(pr, 0, 200)) { issues.push(["e", "sACN priority must be 0–200"]); $("#ioPriority").classList.add("bad"); }
+
+  const inputs = new Map();   // input universe -> row index
+  const outputs = new Map();  // "proto:universe" -> [{row, addr}]
+  let total = 0;
+  rows.forEach((r, i) => {
+    const tr = trs[i], n = i + 1;
+    const mark = (...fs) => fs.forEach(f => { const el = tr && $(`[data-f="${f}"]`, tr); if (el) el.classList.add("bad"); });
+    let ok = true;
+    if (!Number.isInteger(r.in)) { issues.push(["e", `Row ${n}: invalid input universe (Net 0–127, Sub 0–15, Uni 0–15)`]); mark("inN", "inS", "inU"); ok = false; }
+    if (!intIn(r.count, 1, 256)) { issues.push(["e", `Row ${n}: count must be 1–256`]); mark("count"); ok = false; }
+    const art = r.proto === "artnet";
+    if (art && !Number.isInteger(r.out)) { issues.push(["e", `Row ${n}: invalid Art-Net output universe`]); mark("outN", "outS", "outU"); ok = false; }
+    if (!art && !intIn(r.out, 1, 63999)) { issues.push(["e", `Row ${n}: sACN universe must be 1–63999`]); mark("outSacn"); ok = false; }
+    if (r.addr && parseIp(r.addr) === null) { issues.push(["e", `Row ${n}: "${r.addr}" is not a valid IP address`]); mark("addr"); ok = false; }
+    const sum = tr && $(".sum", tr);
+    if (!ok) { if (sum) sum.textContent = "–"; return; }
+
+    if (r.in + r.count - 1 > 32767) { issues.push(["e", `Row ${n}: input range goes past 32767`]); mark("count"); return; }
+    const outMax = art ? 32767 : 63999;
+    if (r.out + r.count - 1 > outMax) { issues.push(["e", `Row ${n}: output range goes past ${outMax}`]); mark("count"); return; }
+    total += r.count;
+
+    for (let k = 0; k < r.count; k++) {
+      const u = r.in + k;
+      if (inputs.has(u)) {
+        issues.push(["e", `Input universe ${u} is used by rows ${inputs.get(u) + 1} and ${n}`]);
+        mark("inN", "inS", "inU");
+        break;
+      }
+      inputs.set(u, i);
+    }
+    for (let k = 0; k < r.count; k++) {
+      const key = r.proto + ":" + (r.out + k);
+      const list = outputs.get(key) || [];
+      list.push({ row: i, addr: r.addr });
+      outputs.set(key, list);
+    }
+    if (sum) {
+      const last = r.count > 1 ? `–${r.in + r.count - 1}` : "";
+      const olast = r.count > 1 ? `–${r.out + r.count - 1}` : "";
+      sum.textContent = `${r.in}${last} → ${art ? "Art-Net" : "sACN"} ${r.out}${olast} ${r.addr ? "@" + r.addr : (art ? "(bcast)" : "(mcast)")}`;
+    }
+  });
+
+  // Two rows sending the same output universe to the same place
+  const reported = new Set();
+  for (const [key, list] of outputs) {
+    for (let a = 0; a < list.length; a++) for (let b = a + 1; b < list.length; b++) {
+      const A = list[a], B = list[b];
+      if (A.row === B.row) continue;
+      if (A.addr && B.addr && A.addr !== B.addr) continue;   // different unicast targets: fine
+      const tag = A.row + "/" + B.row;
+      if (reported.has(tag)) continue;
+      reported.add(tag);
+      const [proto, u] = key.split(":");
+      issues.push(["e", `Rows ${A.row + 1} and ${B.row + 1} both send ${proto === "artnet" ? "Art-Net" : "sACN"} universe ${u} to the same destination`]);
+    }
+  }
+  // Art-Net output on a universe that is also an input: receivers get both streams
+  for (const [key, list] of outputs) {
+    const [proto, u] = key.split(":");
+    if (proto === "artnet" && inputs.has(+u)) {
+      issues.push(["w", `Art-Net output universe ${u} (row ${list[0].row + 1}) is also an input universe: fixtures will receive both the original and the processed data`]);
+    }
+  }
+  if (total > 256) issues.push(["e", `Too many universes in total (${total}, max 256)`]);
+
+  S.ioErrors = issues.filter(x => x[0] === "e").length;
+  showIssues("#ioIssues", "#ioIssuesCard", issues);
+  $("#ioSave").disabled = S.ioErrors > 0;
+  $("#ioMsg").className = "msg" + (S.ioErrors ? " e" : "");
+  $("#ioMsg").textContent = S.ioErrors ? `${S.ioErrors} problem${S.ioErrors > 1 ? "s" : ""} to fix before saving` : (isDirty("io") ? "Unsaved changes" : "");
+  refreshDirty();
+}
+
+function showIssues(listSel, cardSel, issues, onClick) {
+  const ul = $(listSel);
+  // Rebuilding an unchanged list would swallow clicks on it (blur re-validates mid-click)
+  const sig = JSON.stringify(issues);
+  if (ul.dataset.sig === sig) return;
+  ul.dataset.sig = sig;
+  ul.innerHTML = "";
+  for (const [lvl, text, rows] of issues) {
+    const li = document.createElement("li");
+    li.className = lvl;
+    li.innerHTML = `<span class="dot ${lvl}"></span>`;
+    if (onClick && rows && rows.length) {
+      const a = document.createElement("a");
+      a.textContent = text;
+      a.onclick = () => onClick(rows);
+      li.appendChild(a);
+    } else li.appendChild(document.createTextNode(text));
+    ul.appendChild(li);
+  }
+  if (cardSel) $(cardSel).hidden = issues.length === 0;
+}
+
+$("#ioTable tbody").addEventListener("input", e => {
+  const tr = e.target.closest("tr[data-i]");
+  if (!tr) return;
+  if (e.target.dataset.f === "proto") {
+    // Switching protocol: Art-Net universe N is usually sACN universe N+1.
+    // r.out still holds the value for the old protocol (the new field doesn't exist yet).
+    const r = S.io.universes[+tr.dataset.i];
+    const newProto = e.target.value;
+    r.out = Number.isInteger(r.out) ? (newProto === "sacn" ? r.out + 1 : Math.max(0, Math.min(32767, r.out - 1))) : (newProto === "sacn" ? 1 : 0);
+    r.proto = newProto;
+    renderIo();
+    return;
+  }
+  readIoRow(tr);
+  validateIo();
+});
+$("#ioTable tbody").addEventListener("click", e => {
+  const btn = e.target.closest('[data-act="del"]');
+  if (!btn) return;
+  S.io.universes.splice(+btn.closest("tr").dataset.i, 1);
+  renderIo();
+});
+$("#ioAdd").onclick = () => {
+  // Continue after the last row: next free input and output range
+  const last = S.io.universes[S.io.universes.length - 1];
+  const r = last && Number.isInteger(last.in) && Number.isInteger(last.out) && Number.isInteger(last.count)
+    ? { in: Math.min(32767, last.in + last.count), count: 1, proto: last.proto, out: Math.min(last.proto === "artnet" ? 32767 : 63999, last.out + last.count), addr: last.addr }
+    : { in: 0, count: 1, proto: "artnet", out: 1, addr: "" };
+  S.io.universes.push(r);
+  renderIo();
+};
+$("#ioFramerate").oninput = e => { S.io.framerate = readInt(e.target); validateIo(); };
+$("#ioPriority").oninput = e => { S.io.sacnPriority = readInt(e.target); validateIo(); };
+$("#ioRevert").onclick = () => { loadEditors(S.saved, ["io"]); renderIo(); renderShutters(); };
+$("#ioSave").onclick = async () => {
+  if (S.ioErrors) return;
+  const body = ioPayload();
+  $("#ioSave").disabled = true;
+  try {
+    await api("/api/io", body);
+    Object.assign(S.saved, clone(body));
+    toast("Inputs & outputs saved and applied");
+  } catch (e) { toast("Save failed: " + e.message, true); }
+  validateIo();
+  validateShutters();   // universe warnings depend on the I/O config
+};
+
+// ======================================================================
+// Shutters
+// ======================================================================
+function shRowHtml(r, i) {
+  return `<tr data-i="${i}"${S.sel.has(i) ? ' class="sel"' : ""}>
+    <td><input type="checkbox" class="selbox"${S.sel.has(i) ? " checked" : ""}></td>
+    <td class="idx">${i + 1}</td>
+    <td><input data-f="name" value="${esc(r.name)}" style="width:100%" maxlength="32" placeholder="—"></td>
+    <td><input data-f="src" class="mono" value="${esc(r.srcText)}" style="width:100%" placeholder="u.addr"></td>
+    <td><input data-f="dst" class="mono" value="${esc(r.dstText)}" style="width:100%" placeholder="u.addr u.addr …"></td>
+    <td class="cnt"></td>
+    <td class="flag"></td>
+  </tr>`;
+}
+
+function renderShutters() {
+  const tb = $("#shTable tbody");
+  tb.innerHTML = S.sh.length
+    ? S.sh.map(shRowHtml).join("")
+    : `<tr><td colspan="7" class="empty">No shutters yet. Add one, then use duplicate and multi-edit to build the rest.</td></tr>`;
+  refreshSelection();
+  validateShutters();
+}
+
+// Configured input universes (from the I/O editor), to warn about unused references
+function configuredInputs() {
+  const set = new Set();
+  for (const r of S.io.universes) if (Number.isInteger(r.in) && Number.isInteger(r.count)) for (let k = 0; k < r.count; k++) set.add(r.in + k);
+  return set;
+}
+
+function validateShutters() {
+  const issues = [];
+  const trs = $$("#shTable tbody tr[data-i]");
+  const rowErr = S.sh.map(() => ({ src: false, dst: false, lvl: "" }));
+  const inputs = configuredInputs();
+  const destOwner = new Map();    // abs channel -> first row index
+  const dupRows = new Map();      // abs channel -> Set(rows)
+  const srcAbs = new Map();       // abs channel -> first row with it as source
+  const parsed = S.sh.map(r => ({ src: parseChan(r.srcText), dst: parseChanList(r.dstText) }));
+
+  if (S.sh.length > 1024) issues.push(["e", `Too many shutters (${S.sh.length}, max 1024)`]);
+
+  parsed.forEach((p, i) => {
+    const n = i + 1;
+    if (!S.sh[i].srcText.trim()) { issues.push(["e", `#${n}: source is missing`, [i]]); rowErr[i].src = true; }
+    else if (!p.src) { issues.push(["e", `#${n}: invalid source "${S.sh[i].srcText.trim()}"`, [i]]); rowErr[i].src = true; }
+    else if (!srcAbs.has(absOf(p.src))) srcAbs.set(absOf(p.src), i);
+
+    if (p.dst.bad !== undefined) { issues.push(["e", `#${n}: invalid destination "${p.dst.bad}"`, [i]]); rowErr[i].dst = true; }
+    else {
+      const list = p.dst.list;
+      if (list.length === 0) { issues.push(["w", `#${n}: no destinations, this shutter does nothing`, [i]]); rowErr[i].lvl = rowErr[i].lvl || "w"; }
+      if (list.length > 64) { issues.push(["e", `#${n}: ${list.length} destinations (max 64)`, [i]]); rowErr[i].dst = true; }
+      const seen = new Set();
+      for (const c of list) {
+        const a = absOf(c);
+        if (seen.has(a)) { issues.push(["e", `#${n}: destination ${fmtChan(c)} listed twice`, [i]]); rowErr[i].dst = true; continue; }
+        seen.add(a);
+        if (destOwner.has(a)) {
+          if (!dupRows.has(a)) dupRows.set(a, new Set([destOwner.get(a)]));
+          dupRows.get(a).add(i);
+        } else destOwner.set(a, i);
+      }
+    }
+  });
+
+  // Global: the same destination channel in more than one shutter
+  for (const [a, rows] of dupRows) {
+    const list = [...rows].sort((x, y) => x - y);
+    issues.push(["e", `Destination ${fmtChan(fromAbs(a))} is used by shutters ${list.map(x => "#" + (x + 1)).join(", ")}`, list]);
+    for (const i of list) rowErr[i].dst = true;
+  }
+  // Global: a destination that is some shutter's source would be blacked out
+  for (const [a, owner] of destOwner) {
+    if (srcAbs.has(a)) {
+      const s = srcAbs.get(a);
+      issues.push(["e", `${fmtChan(fromAbs(a))} is the source of #${s + 1} and a destination of #${owner + 1}`, [s, owner]]);
+      rowErr[owner].dst = true; rowErr[s].src = true;
+    }
+  }
+  // Universes that are not inputs: the shutter (or part of it) won't do anything
+  parsed.forEach((p, i) => {
+    const missing = new Set();
+    if (p.src && !inputs.has(p.src[0])) missing.add(p.src[0]);
+    if (p.dst.list) for (const c of p.dst.list) if (!inputs.has(c[0])) missing.add(c[0]);
+    if (missing.size) {
+      issues.push(["w", `#${i + 1}: universe ${[...missing].join(", ")} is not configured in Inputs & outputs`, [i]]);
+      if (!rowErr[i].lvl) rowErr[i].lvl = "w";
+    }
+  });
+
+  // Paint
+  trs.forEach((tr, i) => {
+    const e = rowErr[i];
+    $('[data-f="src"]', tr).classList.toggle("bad", e.src);
+    $('[data-f="dst"]', tr).classList.toggle("bad", e.dst);
+    const lvl = (e.src || e.dst) ? "e" : e.lvl;
+    $(".flag", tr).innerHTML = lvl ? `<span class="dot ${lvl}"></span>` : "";
+    const p = parsed[i];
+    $(".cnt", tr).textContent = p.dst.list ? p.dst.list.length : "?";
+  });
+
+  // Sort: errors first, keep row order within the same level
+  issues.sort((a, b) => (a[0] === b[0] ? 0 : a[0] === "e" ? -1 : 1));
+  S.shErrors = issues.filter(x => x[0] === "e").length;
+  showIssues("#shIssues", "#shIssuesCard", issues, rows => { setSelection(rows); scrollToRow(rows[0]); });
+  $("#shSave").disabled = S.shErrors > 0;
+  $("#shMsg").className = "msg" + (S.shErrors ? " e" : "");
+  const warn = issues.length - S.shErrors;
+  $("#shMsg").textContent = S.shErrors
+    ? `${S.shErrors} problem${S.shErrors > 1 ? "s" : ""} to fix before saving`
+    : `${S.sh.length} shutter${S.sh.length === 1 ? "" : "s"}${warn ? ` · ${warn} warning${warn > 1 ? "s" : ""}` : ""}${isDirty("shutters") ? " · unsaved changes" : ""}`;
+  refreshDirty();
+}
+
+function scrollToRow(i) {
+  const tr = $(`#shTable tbody tr[data-i="${i}"]`);
+  if (tr) tr.scrollIntoView({ block: "center", behavior: "smooth" });
+}
+
+// ---- Selection ----
+function refreshSelection() {
+  for (const tr of $$("#shTable tbody tr[data-i]")) {
+    const on = S.sel.has(+tr.dataset.i);
+    tr.classList.toggle("sel", on);
+    $(".selbox", tr).checked = on;
+  }
+  const n = S.sel.size;
+  $("#selCount").textContent = n ? `(${n})` : "";
+  $("#shSelAll").checked = n > 0 && n === S.sh.length;
+  $("#shSelAll").indeterminate = n > 0 && n < S.sh.length;
+  for (const id of ["#beApply", "#shApply", "#dupApply", "#shDelete"]) $(id).disabled = n === 0;
+  $("#dupOffset").value = selectionFootprint() || $("#dupOffset").value;
+  updateBulkPreview();
+}
+function setSelection(rows) { S.sel = new Set(rows); S.anchor = rows.length ? rows[0] : null; refreshSelection(); }
+const selected = () => [...S.sel].sort((a, b) => a - b);
+
+// Span of all channels in the selection: a good default offset for duplicating
+function selectionFootprint() {
+  let lo = Infinity, hi = -Infinity;
+  for (const i of S.sel) {
+    const r = S.sh[i]; if (!r) continue;
+    const chans = [parseChan(r.srcText), ...(parseChanList(r.dstText).list || [])].filter(Boolean);
+    for (const c of chans) { lo = Math.min(lo, absOf(c)); hi = Math.max(hi, absOf(c)); }
+  }
+  return hi >= lo ? hi - lo + 1 : 0;
+}
+
+$("#shTable tbody").addEventListener("click", e => {
+  const tr = e.target.closest("tr[data-i]");
+  if (!tr) return;
+  const i = +tr.dataset.i;
+  const isBox = e.target.classList.contains("selbox");
+  if (!isBox && !e.target.closest(".idx")) return;
+  if (e.shiftKey && S.anchor !== null) {
+    const [a, b] = [Math.min(S.anchor, i), Math.max(S.anchor, i)];
+    if (!(e.ctrlKey || e.metaKey) && !isBox) S.sel.clear();
+    for (let k = a; k <= b; k++) S.sel.add(k);
+  } else if (isBox || e.ctrlKey || e.metaKey) {
+    S.sel.has(i) ? S.sel.delete(i) : S.sel.add(i);
+    S.anchor = i;
+  } else {
+    S.sel = new Set([i]);
+    S.anchor = i;
+  }
+  refreshSelection();
+});
+$("#shSelAll").onchange = e => setSelection(e.target.checked ? S.sh.map((_, i) => i) : []);
+$("#shSelNone").onclick = () => setSelection([]);
+
+$("#shTable tbody").addEventListener("input", e => {
+  const tr = e.target.closest("tr[data-i]");
+  const f = e.target.dataset.f;
+  if (!tr || !f) return;
+  const r = S.sh[+tr.dataset.i];
+  if (f === "name") r.name = e.target.value;
+  else if (f === "src") r.srcText = e.target.value;
+  else if (f === "dst") r.dstText = e.target.value;
+  validateShutters();
+});
+// Tidy up the destination list when leaving the field (expand/compress ranges)
+$("#shTable tbody").addEventListener("change", e => {
+  if (e.target.dataset.f !== "dst" && e.target.dataset.f !== "src") return;
+  const tr = e.target.closest("tr[data-i]");
+  const r = S.sh[+tr.dataset.i];
+  if (e.target.dataset.f === "dst") { const p = parseChanList(r.dstText); if (p.list) r.dstText = e.target.value = fmtChanList(p.list); }
+  else { const c = parseChan(r.srcText); if (c) r.srcText = e.target.value = fmtChan(c); }
+  validateShutters();
+});
+
+$("#shAdd").onclick = () => {
+  S.sh.push({ name: "", srcText: "", dstText: "" });
+  setSelection([S.sh.length - 1]);
+  renderShutters();
+  const tr = $(`#shTable tbody tr[data-i="${S.sh.length - 1}"]`);
+  if (tr) { $('[data-f="src"]', tr).focus(); scrollToRow(S.sh.length - 1); }
+};
+
+$("#shDelete").onclick = () => {
+  const sel = selected();
+  if (!sel.length) return;
+  if (sel.length > 1 && !confirm(`Delete ${sel.length} shutters?`)) return;
+  S.sh = S.sh.filter((_, i) => !S.sel.has(i));
+  setSelection([]);
+  renderShutters();
+};
+
+// ---- Multi-edit ----
+function shiftChan(c, delta) { return c ? fromAbs(absOf(c) + delta) : null; }
+
+// Returns the new rows for the selection, or throws with a message
+function computeBulk() {
+  const sel = selected();
+  const name = $("#beName").value.trim();
+  const numbered = $("#beNumber").checked;
+  const numStart = readInt($("#beNumberStart"));
+  const srcText = $("#beSrc").value.trim(), dstText = $("#beDst").value.trim();
+  const step = readInt($("#beStep"));
+  if (!name && !srcText && !dstText) throw new Error("fill at least one field");
+  if ((srcText || dstText) && !Number.isInteger(step)) throw new Error("step must be a whole number");
+  if (name && numbered && !Number.isInteger(numStart)) throw new Error("numbering start must be a whole number");
+  const src = srcText ? parseChan(srcText) : null;
+  if (srcText && !src) throw new Error(`invalid source "${srcText}"`);
+  const dst = dstText ? parseChanList(dstText) : null;
+  if (dst && dst.bad !== undefined) throw new Error(`invalid destination "${dst.bad}"`);
+
+  return sel.map((i, k) => {
+    const r = { ...S.sh[i] };
+    if (name) r.name = numbered ? `${name} ${numStart + k}` : name;
+    if (src) {
+      const c = shiftChan(src, k * step);
+      if (!c) throw new Error(`row ${k + 1} of the selection: source goes out of range`);
+      r.srcText = fmtChan(c);
+    }
+    if (dst) {
+      const list = dst.list.map(c => shiftChan(c, k * step));
+      if (list.some(c => !c)) throw new Error(`row ${k + 1} of the selection: destinations go out of range`);
+      r.dstText = fmtChanList(list);
+    }
+    return [i, r];
+  });
+}
+
+function updateBulkPreview() {
+  const el = $("#bePreview");
+  if (!S.sel.size) { el.textContent = "Select rows in the table first."; return; }
+  try {
+    const out = computeBulk();
+    const show = ([i, r]) => `#${i + 1} ${r.name ? "“" + r.name + "” " : ""}${r.srcText || "?"} → ${r.dstText || "—"}`;
+    el.textContent = out.length === 1 ? show(out[0]) : `${show(out[0])}  …  ${show(out[out.length - 1])}`;
+  } catch (e) { el.textContent = e.message; }
+}
+for (const id of ["#beName", "#beNumber", "#beNumberStart", "#beSrc", "#beDst", "#beStep"]) $(id).addEventListener("input", updateBulkPreview);
+
+$("#beApply").onclick = () => {
+  let out;
+  try { out = computeBulk(); } catch (e) { toast(e.message, true); return; }
+  for (const [i, r] of out) S.sh[i] = r;
+  renderShutters();
+  toast(`Updated ${out.length} shutter${out.length > 1 ? "s" : ""}`);
+};
+
+$("#shApply").onclick = () => {
+  const delta = readInt($("#shAmount"));
+  const doSrc = $("#shSrc").checked, doDst = $("#shDst").checked;
+  if (!Number.isInteger(delta) || delta === 0) { toast("Shift must be a non-zero whole number", true); return; }
+  if (!doSrc && !doDst) { toast("Choose source and/or destinations", true); return; }
+  const updates = [];
+  for (const i of selected()) {
+    const r = { ...S.sh[i] };
+    if (doSrc && r.srcText.trim()) {
+      const c = shiftChan(parseChan(r.srcText), delta);
+      if (!c) { toast(`#${i + 1}: source invalid or out of range after shifting`, true); return; }
+      r.srcText = fmtChan(c);
+    }
+    if (doDst && r.dstText.trim()) {
+      const p = parseChanList(r.dstText);
+      const list = p.list ? p.list.map(c => shiftChan(c, delta)) : null;
+      if (!list || list.some(c => !c)) { toast(`#${i + 1}: destinations invalid or out of range after shifting`, true); return; }
+      r.dstText = fmtChanList(list);
+    }
+    updates.push([i, r]);
+  }
+  for (const [i, r] of updates) S.sh[i] = r;
+  renderShutters();
+  toast(`Shifted ${updates.length} shutter${updates.length > 1 ? "s" : ""} by ${delta}`);
+};
+
+// ---- Duplicate ----
+function bumpName(name, by) {
+  const m = /^(.*?)(\d+)$/.exec(name);
+  return m ? m[1] + (Number(m[2]) + by) : name;
+}
+$("#dupApply").onclick = () => {
+  const sel = selected();
+  const copies = readInt($("#dupCount")), offset = readInt($("#dupOffset"));
+  if (!intIn(copies, 1, 512)) { toast("Copies must be 1–512", true); return; }
+  if (!Number.isInteger(offset)) { toast("Offset must be a whole number", true); return; }
+  if (S.sh.length + copies * sel.length > 1024) { toast("That would exceed 1024 shutters", true); return; }
+  const added = [];
+  for (let c = 1; c <= copies; c++) {
+    for (const i of sel) {
+      const r = S.sh[i];
+      const src = parseChan(r.srcText), dst = parseChanList(r.dstText);
+      const nsrc = src ? shiftChan(src, c * offset) : null;
+      const ndst = dst.list ? dst.list.map(x => shiftChan(x, c * offset)) : null;
+      if ((src && !nsrc) || (ndst && ndst.some(x => !x))) { toast(`Copy ${c} of #${i + 1} goes out of range`, true); return; }
+      added.push({
+        name: bumpName(r.name, c * sel.length),
+        srcText: nsrc ? fmtChan(nsrc) : r.srcText,
+        dstText: ndst ? fmtChanList(ndst) : r.dstText,
+      });
+    }
+  }
+  const at = sel[sel.length - 1] + 1;
+  S.sh.splice(at, 0, ...added);
+  setSelection(added.map((_, k) => at + k));
+  renderShutters();
+  scrollToRow(at);
+  toast(`Added ${added.length} shutter${added.length > 1 ? "s" : ""}`);
+};
+
+$("#shRevert").onclick = () => { loadEditors(S.saved, ["sh"]); renderShutters(); };
+$("#shSave").onclick = async () => {
+  if (S.shErrors) return;
+  const body = shPayload();
+  $("#shSave").disabled = true;
+  try {
+    await api("/api/shutters", body);
+    S.saved.shutters = clone(body.shutters);
+    // Normalize the editor text to what was saved
+    S.sh = S.saved.shutters.map(shutterToEditor);
+    renderShutters();
+    toast(`${body.shutters.length} shutters saved and applied`);
+  } catch (e) { toast("Save failed: " + e.message, true); validateShutters(); }
+};
+
+// ======================================================================
+// Network
+// ======================================================================
+function renderNet() {
+  $("#netIp").value = S.net.ip;
+  $("#netMask").value = S.net.netmask;
+  $("#netGw").value = S.net.gateway;
+  validateNet();
+}
+function validateNet() {
+  const issues = [];
+  const ip = parseIp(S.net.ip), mask = parseIp(S.net.netmask), gw = S.net.gateway.trim() ? parseIp(S.net.gateway) : 0;
+  for (const id of ["#netIp", "#netMask", "#netGw"]) $(id).classList.remove("bad", "wrn");
+  if (ip === null || ip === 0) { issues.push(["e", "Invalid IP address"]); $("#netIp").classList.add("bad"); }
+  if (mask === null || mask === 0 || (((~mask >>> 0) & ((~mask >>> 0) + 1)) >>> 0) !== 0) { issues.push(["e", "Invalid netmask (must be contiguous, e.g. 255.255.255.0)"]); $("#netMask").classList.add("bad"); }
+  if (gw === null) { issues.push(["e", "Invalid gateway (leave empty for none)"]); $("#netGw").classList.add("bad"); }
+  if (ip && mask && !issues.length) {
+    const host = ip & ~mask;
+    if (host === 0 || (host >>> 0) === ((~mask) >>> 0)) { issues.push(["e", "The IP is the network or broadcast address of its subnet"]); $("#netIp").classList.add("bad"); }
+    if (gw && ((gw & mask) >>> 0) !== ((ip & mask) >>> 0)) { issues.push(["w", "Gateway is outside the subnet"]); $("#netGw").classList.add("wrn"); }
+    if (!issues.some(x => x[0] === "e")) issues.push(["w", `Art-Net broadcast address will be ${ipStr(((ip & mask) | ~mask) >>> 0)}`]);
+  }
+  S.netErrors = issues.filter(x => x[0] === "e").length;
+  showIssues("#netIssues", null, issues.map(x => x[1].startsWith("Art-Net broadcast") ? ["", x[1]] : x));
+  $("#netSave").disabled = S.netErrors > 0;
+  $("#netMsg").textContent = isDirty("network") ? "Unsaved changes" : "";
+  refreshDirty();
+}
+for (const [id, key] of [["#netIp", "ip"], ["#netMask", "netmask"], ["#netGw", "gateway"]]) {
+  $(id).addEventListener("input", e => { S.net[key] = e.target.value; validateNet(); });
+}
+$("#netRevert").onclick = () => { loadEditors(S.saved, ["net"]); renderNet(); };
+
+let moveTimer = null;
+$("#netSave").onclick = async () => {
+  if (S.netErrors) return;
+  const body = netPayload();
+  const oldIp = S.saved.network.ip;
+  if (body.network.ip !== oldIp && !confirm(`Move the device to ${body.network.ip}?\nThis page will lose the connection to ${oldIp}.`)) return;
+  $("#netSave").disabled = true;
+  try {
+    await api("/api/network", body);
+    S.saved.network = clone(body.network);
+    validateNet();
+    if (body.network.ip !== location.hostname) {
+      const url = `http://${body.network.ip}${location.port ? ":" + location.port : ""}/`;
+      $("#moveLink").textContent = url;
+      $("#moveLink").href = url;
+      $("#moveOverlay").classList.add("show");
+      let left = 5;
+      const tick = () => {
+        $("#moveCountdown").textContent = `Opening it in ${left} s…`;
+        if (left-- <= 0) { location.href = url; return; }
+        moveTimer = setTimeout(tick, 1000);
+      };
+      tick();
+    } else toast("Network settings saved");
+  } catch (e) { toast("Save failed: " + e.message, true); validateNet(); }
+};
+$("#moveClose").onclick = () => { clearTimeout(moveTimer); $("#moveOverlay").classList.remove("show"); };
+
+// ======================================================================
+// Status, backup / restore, startup
+// ======================================================================
+function fmtUptime(s) {
+  const d = Math.floor(s / 86400), h = Math.floor(s / 3600) % 24, m = Math.floor(s / 60) % 60;
+  return (d ? d + "d " : "") + (d || h ? h + "h " : "") + m + "m";
+}
+async function refreshStatus() {
+  try {
+    const st = await api("/api/status");
+    $("#liveDot").classList.remove("off");
+    $("#hdrInfo").textContent = `${st.ip || "?"} · up ${fmtUptime(st.uptime)}`;
+    $("#stIp").textContent = st.ip || "–";
+    $("#stMac").textContent = st.mac || "–";
+    $("#stUptime").textContent = fmtUptime(st.uptime);
+    $("#stHeap").textContent = Math.round(st.freeHeap / 1024) + " KB";
+  } catch (e) {
+    $("#liveDot").classList.add("off");
+    $("#hdrInfo").textContent = "device offline";
+  }
+}
+
+$("#btnExport").onclick = async () => {
+  try {
+    const cfg = await api("/api/config");
+    const blob = new Blob([JSON.stringify(cfg, null, 2)], { type: "application/json" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = `shutter-emulator-${cfg.network.ip}-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+  } catch (e) { toast("Backup failed: " + e.message, true); }
+};
+$("#btnImport").onclick = () => $("#importFile").click();
+$("#importFile").onchange = async e => {
+  const f = e.target.files[0];
+  e.target.value = "";
+  if (!f) return;
+  try {
+    const cfg = JSON.parse(await f.text());
+    if (!cfg || !Array.isArray(cfg.universes) || !Array.isArray(cfg.shutters) || !cfg.network) throw new Error("not a Shutter Emulator backup");
+    loadEditors(cfg);
+    renderAll();
+    toast("Backup loaded into the editors. Review each tab, then save it.");
+  } catch (err) { toast("Restore failed: " + err.message, true); }
+};
+
+function renderAll() { renderIo(); renderShutters(); renderNet(); }
+
+document.addEventListener("keydown", e => {
+  if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    const btn = { io: "#ioSave", shutters: "#shSave", network: "#netSave" }[activeTab()];
+    if (!$(btn).disabled) $(btn).click();
+  }
+});
+window.addEventListener("beforeunload", e => {
+  if (["io", "shutters", "network"].some(isDirty)) { e.preventDefault(); e.returnValue = ""; }
+});
+
+(async function init() {
+  try { const t = localStorage.getItem("tab"); if (t && $(`#tab-${t}`)) showTab(t); } catch (e) { }
+  try {
+    S.saved = await api("/api/config");
+    loadEditors(S.saved);
+    renderAll();
+  } catch (e) {
+    toast("Cannot load the configuration: " + e.message, true);
+    S.saved = { network: { ip: "", netmask: "", gateway: "" }, framerate: 44, sacnPriority: 100, universes: [], shutters: [] };
+    loadEditors(S.saved);
+    renderAll();
+  }
+  refreshStatus();
+  setInterval(refreshStatus, 10000);
+})();
+</script>
+</body>
+</html>

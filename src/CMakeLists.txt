@@ -7,5 +7,5 @@ idf_component_register(
     SRCS ${app_sources}
     PRIV_REQUIRES   esp_eth esp_netif esp_event esp_driver_gpio
                     esp_driver_spi lwip esp_http_server espressif__w5500
-                    esp_timer
+                    esp_timer nvs_flash espressif__cjson
 )

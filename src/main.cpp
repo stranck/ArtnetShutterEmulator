@@ -11,11 +11,12 @@
 #include "esp_heap_caps.h"
 #include "driver/gpio.h"
 #include "driver/spi_master.h"
-#include "esp_http_server.h"
 #include "lwip/inet.h"
 
 #include "artnet.h"
 #include "fakeShutter.h"
+#include "configStore.h"
+#include "webServer.h"
 
 static const char *TAG = "main";
 
@@ -27,10 +28,14 @@ static const char *TAG = "main";
 #define ETH_INT_GPIO   10
 #define ETH_RST_GPIO   9
 
-// Static network config (adjust to match your network)
-#define IP_ADDR   "2.0.3.1"
-#define GW_ADDR   "2.0.1.1"
-#define NETMASK   "255.0.0.0"
+// Hold this button for RECOVERY_HOLD_MS while the device runs to restore the
+// factory network settings. (Holding it at power-on would enter the ROM
+// download mode instead: GPIO0 is a strapping pin.)
+#define RECOVERY_BUTTON_GPIO  GPIO_NUM_0   // BOOT button
+#define RECOVERY_HOLD_MS      5000
+
+static AppConfig  s_config;      // the live configuration (edited by the web UI)
+static WebServer *s_web = nullptr;
 
 // ---------- Ethernet events ----------
 
@@ -48,48 +53,45 @@ static void eth_event_handler(void *arg, esp_event_base_t base, int32_t id, void
     }
 }
 
-// ---------- HTTP server ----------
+// ---------- Recovery ----------
 
-// Called for every GET request (any path)
-static esp_err_t http_get_handler(httpd_req_t *req)
+static void recovery_task(void *arg)
 {
-    ESP_LOGI(TAG, "HTTP GET %s", req->uri);
-    static const char html[] = "<!DOCTYPE html><html><body>test</body></html>";
-    httpd_resp_set_type(req, "text/html");
-    return httpd_resp_send(req, html, HTTPD_RESP_USE_STRLEN);
-}
+    esp_netif_t *netif = (esp_netif_t *)arg;
 
-static void start_http_server(void)
-{
-    httpd_config_t config = HTTPD_DEFAULT_CONFIG();   // port 80
-    config.uri_match_fn = httpd_uri_match_wildcard;   // allow "/*" patterns
+    gpio_config_t io = {};
+    io.pin_bit_mask = 1ULL << RECOVERY_BUTTON_GPIO;
+    io.mode = GPIO_MODE_INPUT;
+    io.pull_up_en = GPIO_PULLUP_ENABLE;
+    gpio_config(&io);
 
-    httpd_handle_t server = NULL;
-    ESP_ERROR_CHECK(httpd_start(&server, &config));
+    int heldMs = 0;
+    while (true) {
+        vTaskDelay(pdMS_TO_TICKS(100));
+        if (gpio_get_level(RECOVERY_BUTTON_GPIO) != 0) {   // released (pressed = low)
+            heldMs = 0;
+            continue;
+        }
+        heldMs += 100;
+        if (heldMs != RECOVERY_HOLD_MS) continue;          // fire once per press
 
-    httpd_uri_t get_uri = {};
-    get_uri.uri = "/*";
-    get_uri.method = HTTP_GET;
-    get_uri.handler = http_get_handler;
-    ESP_ERROR_CHECK(httpd_register_uri_handler(server, &get_uri));
-
-    ESP_LOGI(TAG, "HTTP server listening on port %d", config.server_port);
+        AppConfig defaults;
+        config_defaults(&defaults);
+        s_config.network = defaults.network;
+        ESP_LOGW(TAG, "BOOT held %d s: restoring factory network settings", RECOVERY_HOLD_MS / 1000);
+        config_save(&s_config);
+        if (config_apply_network(&s_config, netif) == ESP_OK) artnet_announce();
+    }
 }
 
 // ---------- Ethernet setup ----------
 
-static esp_netif_t *start_ethernet(esp_netif_ip_info_t *ip_info)
+static esp_netif_t *start_ethernet(const AppConfig *cfg)
 {
     // Network interface with static IP (no DHCP)
     esp_netif_config_t netif_cfg = ESP_NETIF_DEFAULT_ETH();
     esp_netif_t *eth_netif = esp_netif_new(&netif_cfg);
-
-    ESP_ERROR_CHECK(esp_netif_dhcpc_stop(eth_netif));
-    memset(ip_info, 0, sizeof(*ip_info));
-    ip_info->ip.addr      = esp_ip4addr_aton(IP_ADDR);
-    ip_info->gw.addr      = esp_ip4addr_aton(GW_ADDR);
-    ip_info->netmask.addr = esp_ip4addr_aton(NETMASK);
-    ESP_ERROR_CHECK(esp_netif_set_ip_info(eth_netif, ip_info));
+    ESP_ERROR_CHECK(config_apply_network(cfg, eth_netif));
 
     // SPI bus
     spi_bus_config_t buscfg;
@@ -147,18 +149,20 @@ extern "C" void app_main(void)
     ESP_ERROR_CHECK(esp_event_handler_register(ETH_EVENT, ESP_EVENT_ANY_ID,
                                                &eth_event_handler, NULL));
 
-    esp_netif_ip_info_t ip_info;
-    esp_netif_t *eth_netif = start_ethernet(&ip_info);
-    ESP_LOGI(TAG, "Static IP: " IPSTR, IP2STR(&ip_info.ip));
+    // Configuration stored in flash (defaults on first boot)
+    config_load(&s_config);
 
-    start_http_server();
+    esp_netif_t *eth_netif = start_ethernet(&s_config);
+    xTaskCreate(recovery_task, "recovery", 4096, eth_netif, 2, NULL);
+
     initFakeShutter(eth_netif);
+    config_apply_io(&s_config);
+    config_apply_shutters(&s_config);
+
+    s_web = new WebServer(&s_config, eth_netif);
+    ESP_ERROR_CHECK(s_web->start());
 
     // Let controllers know we're here once the link is up
     vTaskDelay(pdMS_TO_TICKS(2000));
     artnet_announce();
-
-    // Example for later (sending):
-    //   uint8_t dmx[512] = {255, 128, 0};
-    //   artnet_send_dmx(ARTNET_PORT_ADDRESS(0, 0, 1), dmx, sizeof(dmx), "192.168.1.255");
 }

@@ -1,4 +1,14 @@
 dependencies:
+  espressif/cjson:
+    component_hash: e788323270d90738662d66fffa910bfe1fba019bba087f01557e70c40485b469
+    dependencies:
+    - name: idf
+      require: private
+      version: '>=5.0'
+    source:
+      registry_url: https://components.espressif.com/
+      type: service
+    version: 1.7.19~2
   espressif/w5500:
     component_hash: b5f5b466dd0b8f1f2de7ac5b7e4a364e993daf40c999044a54fb545e25be8aba
     dependencies:
@@ -28,7 +38,8 @@ dependencies:
       type: idf
     version: 6.1.0
 direct_dependencies:
+- espressif/cjson
 - espressif/w5500
-manifest_hash: 42e2c01223d469db51f736d0658d6161c95be5d7e081b32b56b8754074485a44
+manifest_hash: 9105e0666e78cee255cd7b897c050ef4ab9d0cf20539551bad5b8f9f3fe8971e
 target: esp32s3
 version: 3.0.0
