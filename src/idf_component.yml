@@ -1,3 +1,4 @@
 dependencies:
   espressif/w5500: "^2.0.0"
   espressif/cjson: "^1.7.19"
+  espressif/led_strip: "^3.0.3"

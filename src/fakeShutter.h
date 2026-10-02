@@ -4,6 +4,11 @@
 #include "lwip/sockets.h"
 
 #define EXTRA_FRAMERATE_WAIT (5 * 1000)
+#define LED_GPIO  21
+#define LED_ARTNET_FRAME 0,15,0
+#define LED_FRAMERATE 0,0,25
+#define LED_ERROR 30,0,0
+#define NO_SIGNAL_TIMEOUT (5 * 1000 * 1000)
 
 typedef struct {
     uint16_t universeId;
@@ -40,6 +45,12 @@ typedef struct {
     bool **destDirtyFlags;
     int destDirtyFlagsCount;
 } FakeShutter;
+
+typedef enum {
+    NOPE = 0,
+    YES_ARTNET = 1,
+    YES_FRAMERATE = 2
+} ShouldRunTick;
 
 void initFakeShutter(esp_netif_t *eth);
 

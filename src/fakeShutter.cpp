@@ -9,6 +9,8 @@
 #include "freertos/semphr.h"
 #include "esp_timer.h"
 #include "periodic_task.h"
+#include "led_strip.h"
+
 
 
 static const char *TAG = "fake-shutter";
@@ -20,7 +22,10 @@ FakeShutter *_shutters = nullptr;
 int _shuttersCount = 0;
 
 int64_t _lastPacketOut = 0;
+int64_t _lastTickRun = 0;
 int64_t _deltaTimeFramerateMicro = 0;
+
+static led_strip_handle_t debugLed;
 
 SemaphoreHandle_t configSemaphore;
 StaticSemaphore_t configSemaphore_buffer;
@@ -44,10 +49,9 @@ static int getUniverseIndex(uint16_t universe) {
     return -1;
 }
 
-inline bool shouldRunTick() {
-    int64_t currentTime = esp_timer_get_time();
+inline ShouldRunTick shouldRunTick(int64_t currentTime) {
     //We are allowed to send only if enough time has passed since the last out frame, or all universes are dirty
-    if ((currentTime - _lastPacketOut) <= _deltaTimeFramerateMicro) {
+    if ((currentTime - _lastTickRun) <= _deltaTimeFramerateMicro) {
         bool allDirty = true;
         //ESP_LOGI(TAG, "RunTick: Universe count %d", _universeCount);
         for (int i = 0; i < _universeCount; i++) {
@@ -57,22 +61,26 @@ inline bool shouldRunTick() {
             }
         }
         //ESP_LOGI(TAG, "RunTick: allDirty = %d", allDirty);
-        if (!allDirty) return false;
+        if (!allDirty) return NOPE;
         //ESP_LOGI(TAG, "RunTick: Running for all uni received");
-        _lastPacketOut = currentTime + EXTRA_FRAMERATE_WAIT; //If we're sending because all universes are dirty, wait a bit more to stay synchronized with the source
+        _lastTickRun = currentTime + EXTRA_FRAMERATE_WAIT; //If we're sending because all universes are dirty, wait a bit more to stay synchronized with the source
+        return YES_ARTNET;
     } else {
         //ESP_LOGI(TAG, "RunTick: Running for timeframe");
-        _lastPacketOut = currentTime;
+        _lastTickRun = currentTime;
+        return YES_FRAMERATE;
     }
-    return true;
 }
 
 static void runShutterTick(void *ctx) {
     if (xSemaphoreTakeRecursive(configSemaphore, 0) != pdTRUE) return;
-    if (!shouldRunTick()) {
+    int64_t currentTime = esp_timer_get_time();
+    ShouldRunTick shouldRunTickRes = shouldRunTick(currentTime);
+    if (!shouldRunTickRes) {
         xSemaphoreGiveRecursive(configSemaphore);
         return;
     }
+    
 
     for (int i = 0; i < _shuttersCount; i++) {
         FakeShutter *shutter = &_shutters[i];
@@ -124,6 +132,7 @@ static void runShutterTick(void *ctx) {
     }
 
 
+    bool atLeastOneUniverse = false;
     //Send universes and clean dirty flags
     for (int i = 0; i < _universeCount; i++) {
         DmxUniverse *uni = _universes[i];
@@ -139,17 +148,38 @@ static void runShutterTick(void *ctx) {
             } else {
                 sacn_send_dmx(uni->outUniId, seq, uni->data, 512, addr);
             }
+            atLeastOneUniverse = true;
             uni->dirty = false;
         }
     }
 
-    //Restore changed values
-    for (int i = 0; i < _shuttersCount; i++) {
-        FakeShutter *shutter = &_shutters[i];
-        if (shutter->changed) {
-            shutter->changed = false;
-            for (int j = 0; j < shutter->destValuesCount; j++) {
-                *shutter->destValues[j] = shutter->originalValues[j];
+    if(atLeastOneUniverse) {
+        //Update last packet sent time
+        _lastPacketOut = currentTime;
+
+        //Update led color
+        if (shouldRunTickRes == YES_FRAMERATE) {
+            led_strip_set_pixel(debugLed, 0, LED_FRAMERATE);
+        } else {
+            led_strip_set_pixel(debugLed, 0, LED_ARTNET_FRAME);
+        }
+        led_strip_refresh(debugLed);
+        
+        //Restore changed values
+        for (int i = 0; i < _shuttersCount; i++) {
+            FakeShutter *shutter = &_shutters[i];
+            if (shutter->changed) {
+                shutter->changed = false;
+                for (int j = 0; j < shutter->destValuesCount; j++) {
+                    *shutter->destValues[j] = shutter->originalValues[j];
+                }
+            }
+        }
+    } else {
+        if(shouldRunTickRes == YES_FRAMERATE) {
+            if ((currentTime - _lastPacketOut) > NO_SIGNAL_TIMEOUT) {
+                led_strip_set_pixel(debugLed, 0, LED_ERROR);
+                led_strip_refresh(debugLed);
             }
         }
     }
@@ -189,6 +219,20 @@ void initFakeShutter(esp_netif_t *eth){
 
     periodic_task_config_t cfg = PERIODIC_TASK_DEFAULT_CONFIG("shutterTick", 1000, runShutterTick, NULL);
     ESP_ERROR_CHECK(periodic_task_start(&cfg, &shutterTick_task));
+
+    led_strip_config_t strip = {};
+    strip.strip_gpio_num = LED_GPIO;
+    strip.max_leds = 1;
+    strip.led_model = LED_MODEL_WS2812;
+    strip.color_component_format = LED_STRIP_COLOR_COMPONENT_FMT_GRB;
+
+    led_strip_rmt_config_t rmt = {};
+    rmt.clk_src = RMT_CLK_SRC_DEFAULT;
+    rmt.resolution_hz = 10 * 1000 * 1000;   // 10 MHz
+
+    ESP_ERROR_CHECK(led_strip_new_rmt_device(&strip, &rmt, &debugLed));
+    led_strip_set_pixel(debugLed, 0, LED_ERROR);
+    led_strip_refresh(debugLed);
 }
 
 
