@@ -131,10 +131,11 @@ static inline uint32_t channel_key(const ChannelRef &c)
     return (uint32_t)c.universe * 512u + (c.address - 1);
 }
 
+// Same notation as the web UI: universes are shown 1-based (1 = Art-Net Port-Address 0)
 static std::string channel_str(const ChannelRef &c)
 {
     char buf[16];
-    snprintf(buf, sizeof(buf), "%u.%03u", c.universe, c.address);
+    snprintf(buf, sizeof(buf), "%u.%03u", (unsigned)c.universe + 1, c.address);
     return buf;
 }
 

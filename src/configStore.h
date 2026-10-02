@@ -44,7 +44,8 @@ struct UniverseRow {
     uint32_t outAddr;     // unicast destination, network byte order; 0 = broadcast/multicast
 };
 
-// A DMX channel: Art-Net input universe + 1-based DMX address
+// A DMX channel: Art-Net input universe + 1-based DMX address.
+// `universe` is the real 0-based Port-Address; only the web UI shows it +1.
 struct ChannelRef {
     uint16_t universe;
     uint16_t address;     // 1..512

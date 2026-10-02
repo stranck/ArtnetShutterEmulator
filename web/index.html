@@ -130,7 +130,7 @@ td.flag{width:24px;text-align:center}
           <th>Output</th>
           <th>Output universe</th>
           <th>Destination IP</th>
-          <th>Mapping</th>
+          <th title="Universe numbers used in the Shutters tab → where the processed data goes">Shutter universe → output</th>
           <th></th>
         </tr>
       </thead>
@@ -166,8 +166,8 @@ td.flag{width:24px;text-align:center}
         <label class="f">&nbsp;<input id="beNumberStart" class="n3 mono" type="number" value="1"></label>
       </div>
       <div class="row" style="margin-top:10px">
-        <label class="f">Source (first)<input id="beSrc" class="mono" style="width:100px" placeholder="e.g. 0.001"></label>
-        <label class="f">Destinations (first)<input id="beDst" class="mono" style="width:220px" placeholder="e.g. 0.004-0.006 0.010"></label>
+        <label class="f">Source (first)<input id="beSrc" class="mono" style="width:100px" placeholder="e.g. 1.001"></label>
+        <label class="f">Destinations (first)<input id="beDst" class="mono" style="width:220px" placeholder="e.g. 1.004-1.006 1.010"></label>
         <label class="f">Step (channels)<input id="beStep" class="n3 mono" type="number" value="16"></label>
       </div>
       <div class="row" style="margin-top:10px">
@@ -193,7 +193,7 @@ td.flag{width:24px;text-align:center}
       <p class="hint" style="margin:10px 0 0">The copies are inserted after the selection, with every source and destination moved by the offset. Names ending in a number keep counting. The offset is pre-filled with the footprint of the selection.</p>
       <div class="panel-sub">
         <h2 style="margin-bottom:6px">Channel format</h2>
-        <p class="hint" style="margin:0"><code>universe.address</code>, e.g. <code>0.001</code> or <code>17.120</code>. Universe = Art-Net Port-Address of an input universe. Destinations: separate with spaces or commas, ranges with <code>-</code> or <code>thru</code> (<code>0.002-0.004</code>).</p>
+        <p class="hint" style="margin:0"><code>universe.address</code>, e.g. <code>1.001</code> or <code>17.120</code>. Universes count from 1: universe <code>1</code> is Art-Net <code>0·0·0</code>, universe <code>17</code> is <code>0·1·0</code> (the Inputs &amp; outputs tab shows the number of each input). Destinations: separate with spaces or commas, ranges with <code>-</code> or <code>thru</code> (<code>1.002-1.004</code>).</p>
       </div>
     </div>
   </div>
@@ -311,7 +311,10 @@ async function api(path, body) {
 }
 
 // ---- DMX channels: [universe, address] with address 1..512 ----
-const fmtChan = c => c ? `${c[0]}.${String(c[1]).padStart(3, "0")}` : "";
+// In the editor universes are 1-based (1 = Art-Net 0·0·0); stored/sent as the 0-based Port-Address
+const fmtChan = c => c ? `${c[0] + 1}.${String(c[1]).padStart(3, "0")}` : "";
+const uniLabel = pa => pa + 1;                                   // Port-Address -> universe shown to the user
+const paStr = pa => `${pa >> 8}·${(pa >> 4) & 15}·${pa & 15}`;  // Port-Address -> Net·Sub·Uni
 const absOf = c => c[0] * 512 + c[1] - 1;
 const fromAbs = n => (Number.isInteger(n) && n >= 0 && n <= MAX_ABS) ? [Math.floor(n / 512), n % 512 + 1] : null;
 
@@ -319,11 +322,11 @@ function parseChan(s) {
   const m = /^(\d{1,5})[.\/:](\d{1,3})$/.exec(String(s).trim());
   if (!m) return null;
   const u = +m[1], a = +m[2];
-  if (u > 32767 || a < 1 || a > 512) return null;
-  return [u, a];
+  if (u < 1 || u > 32768 || a < 1 || a > 512) return null;
+  return [u - 1, a];
 }
 
-// "0.002 0.004-0.006, 1.010 thru 1.012" -> list of channels. Returns {list} or {bad}
+// "1.002 1.004-1.006, 2.010 thru 2.012" -> list of channels. Returns {list} or {bad}
 function parseChanList(s) {
   const text = String(s).replace(/\s+thru\s+/gi, "-").trim();
   if (!text) return { list: [] };
@@ -344,7 +347,7 @@ function parseChanList(s) {
   return { list };
 }
 
-// [[0,2],[0,3],[0,4],[0,9]] -> "0.002-0.004 0.009"
+// [[0,2],[0,3],[0,4],[0,9]] -> "1.002-1.004 1.009"
 function fmtChanList(list) {
   const out = [];
   for (let i = 0; i < list.length;) {
@@ -509,7 +512,7 @@ function validateIo() {
     for (let k = 0; k < r.count; k++) {
       const u = r.in + k;
       if (inputs.has(u)) {
-        issues.push(["e", `Input universe ${u} is used by rows ${inputs.get(u) + 1} and ${n}`]);
+        issues.push(["e", `Input ${paStr(u)} (universe ${uniLabel(u)}) is used by rows ${inputs.get(u) + 1} and ${n}`]);
         mark("inN", "inS", "inU");
         break;
       }
@@ -522,9 +525,8 @@ function validateIo() {
       outputs.set(key, list);
     }
     if (sum) {
-      const last = r.count > 1 ? `–${r.in + r.count - 1}` : "";
-      const olast = r.count > 1 ? `–${r.out + r.count - 1}` : "";
-      sum.textContent = `${r.in}${last} → ${art ? "Art-Net" : "sACN"} ${r.out}${olast} ${r.addr ? "@" + r.addr : (art ? "(bcast)" : "(mcast)")}`;
+      const range = (a, f) => r.count > 1 ? `${f(a)}–${f(a + r.count - 1)}` : `${f(a)}`;
+      sum.textContent = `universe ${range(r.in, uniLabel)} → ${art ? "Art-Net " + range(r.out, paStr) : "sACN " + range(r.out, x => x)} ${r.addr ? "@" + r.addr : (art ? "(bcast)" : "(mcast)")}`;
     }
   });
 
@@ -539,14 +541,14 @@ function validateIo() {
       if (reported.has(tag)) continue;
       reported.add(tag);
       const [proto, u] = key.split(":");
-      issues.push(["e", `Rows ${A.row + 1} and ${B.row + 1} both send ${proto === "artnet" ? "Art-Net" : "sACN"} universe ${u} to the same destination`]);
+      issues.push(["e", `Rows ${A.row + 1} and ${B.row + 1} both send ${proto === "artnet" ? "Art-Net " + paStr(+u) : "sACN universe " + u} to the same destination`]);
     }
   }
   // Art-Net output on a universe that is also an input: receivers get both streams
   for (const [key, list] of outputs) {
     const [proto, u] = key.split(":");
     if (proto === "artnet" && inputs.has(+u)) {
-      issues.push(["w", `Art-Net output universe ${u} (row ${list[0].row + 1}) is also an input universe: fixtures will receive both the original and the processed data`]);
+      issues.push(["w", `Art-Net output ${paStr(+u)} (row ${list[0].row + 1}) is also an input: fixtures will receive both the original and the processed data`]);
     }
   }
   if (total > 256) issues.push(["e", `Too many universes in total (${total}, max 256)`]);
@@ -715,7 +717,7 @@ function validateShutters() {
     if (p.src && !inputs.has(p.src[0])) missing.add(p.src[0]);
     if (p.dst.list) for (const c of p.dst.list) if (!inputs.has(c[0])) missing.add(c[0]);
     if (missing.size) {
-      issues.push(["w", `#${i + 1}: universe ${[...missing].join(", ")} is not configured in Inputs & outputs`, [i]]);
+      issues.push(["w", `#${i + 1}: universe ${[...missing].map(u => `${uniLabel(u)} (${paStr(u)})`).join(", ")} is not configured in Inputs & outputs`, [i]]);
       if (!rowErr[i].lvl) rowErr[i].lvl = "w";
     }
   });
