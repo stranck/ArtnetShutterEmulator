@@ -26,6 +26,9 @@ typedef struct {
     int startCounter;
     bool isOpen;
 
+    bool changed;
+    uint8_t *originalValues;
+
     //This is for reconstruct the following pointers
     UniverseAddressPair sourceValue_;
     UniverseAddressPair *destValues_;
