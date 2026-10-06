@@ -21,6 +21,8 @@ int _universeCount = 0;
 FakeShutter *_shutters = nullptr;
 int _shuttersCount = 0;
 
+bool _doubleOn = false;
+
 int64_t _lastPacketOut = 0;
 int64_t _lastTickRun = 0;
 int64_t _deltaTimeFramerateMicro = 0;
@@ -93,9 +95,11 @@ static void runShutterTick(void *ctx) {
                 if (shutter->isOpen) {
                     //Set dirty flags
                     for (int j = 0; j < shutter->destDirtyFlagsCount; j++) *shutter->destDirtyFlags[j] = true;
-                    //Next tick will be closed
-                    shutter->isOpen = false;
                     int originalCounter = shutter->counter;
+                    if (!_doubleOn || originalCounter != 0) { 
+                        //Next tick will be closed
+                        shutter->isOpen = false;
+                    }
                     //Reroll counter
                     if (val < 100) { //Sync strobe
                         int newCount = 100 - val;
@@ -105,6 +109,10 @@ static void runShutterTick(void *ctx) {
                         int newCount = (esp_random() % (200 - val)) + 1;
                         shutter->counter = newCount;
                         shutter->startCounter = newCount;
+                    }
+                    if (_doubleOn && shutter->counter == 1 && shutter->startCounter == 1) {
+                        shutter->counter = 2;
+                        shutter->startCounter = 2;
                     }
                     //ESP_LOGI(TAG, "Open. NewCounter: %d OrgCounter: %d Val: %d", shutter->counter, originalCounter, val);
                     //if we come from a negative counter, it means we're coming from a shutter open. Go directly to a black round
@@ -391,4 +399,8 @@ void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr
     _universeCount = count;
     rebuildFakeShutterCache();
     xSemaphoreGiveRecursive(configSemaphore);
+}
+
+void setDoubleOn(bool doubleOn) {
+    _doubleOn = doubleOn;
 }

@@ -59,3 +59,5 @@ void setFramerate(int frameRate);
 void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr* universesOutAddr, bool* isArtnetOut, int count);
 
 void reallocShutters(UniverseAddressPair *sourceValues, UniverseAddressPair **destValues, int *destValuesCount, int count);
+
+void setDoubleOn(bool doubleOn);
