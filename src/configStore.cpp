@@ -40,6 +40,7 @@ void config_defaults(AppConfig *cfg)
     cfg->sacnPriority    = 100;
     cfg->doubleOn        = false;
     cfg->constTrans       = false;
+    cfg->outputEnable     = true;
     cfg->universes.clear();
     cfg->shutters.clear();
 }
@@ -158,6 +159,7 @@ cJSON *config_to_json(const AppConfig *cfg)
     cJSON_AddNumberToObject(root, "sacnPriority", cfg->sacnPriority);
     cJSON_AddBoolToObject(root, "doubleOn", cfg->doubleOn);
     cJSON_AddBoolToObject(root, "constTrans", cfg->constTrans);
+    cJSON_AddBoolToObject(root, "outputEnable", cfg->outputEnable);
 
     cJSON *unis = cJSON_AddArrayToObject(root, "universes");
     for (const UniverseRow &r : cfg->universes) {
@@ -258,6 +260,17 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
         constTrans = cJSON_IsTrue(dbl);
     }
 
+    // Optional: configurations saved before this setting existed don't have it -> output stays on
+    bool outputEnable = true;
+    dbl = cJSON_GetObjectItemCaseSensitive(root, "outputEnable");
+    if (dbl) {
+        if (!cJSON_IsBool(dbl)) {
+            err = "settings: \"outputEnable\" must be true or false";
+            return ESP_ERR_INVALID_ARG;
+        }
+        outputEnable = cJSON_IsTrue(dbl);
+    }
+
     const cJSON *arr = cJSON_GetObjectItemCaseSensitive(root, "universes");
     if (!cJSON_IsArray(arr)) {
         err = "missing \"universes\" array";
@@ -337,6 +350,7 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
     cfg->sacnPriority = priority;
     cfg->doubleOn = doubleOn;
     cfg->constTrans = constTrans;
+    cfg->outputEnable = outputEnable;
     cfg->universes = std::move(rows);
     return ESP_OK;
 }
@@ -563,6 +577,7 @@ void config_apply_io(const AppConfig *cfg)
     sacn_set_priority(cfg->sacnPriority);
     setDoubleOn(cfg->doubleOn);
     setContinuousTransmission(cfg->constTrans);
+    setOutputEnable(cfg->outputEnable);
     reallocUniverses(inIds.get(), outIds.get(), outAddrs.get(), isArtnet.get(), count);
     ESP_LOGI(TAG, "Applied %d universes, %d fps, sACN priority %u",
              count, cfg->framerate, cfg->sacnPriority);

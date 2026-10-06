@@ -62,3 +62,4 @@ void reallocShutters(UniverseAddressPair *sourceValues, UniverseAddressPair **de
 
 void setDoubleOn(bool doubleOn);
 void setContinuousTransmission(bool continuousTranmission);
+void setOutputEnable(bool outputEnable);
