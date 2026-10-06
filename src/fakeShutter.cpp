@@ -165,6 +165,7 @@ static void runShutterTick(void *ctx) {
         }
     }
 
+    //Update led color
     if(atLeastOneUniverse) {
         //Update last packet sent time
         _lastPacketOut = currentTime;
@@ -176,22 +177,23 @@ static void runShutterTick(void *ctx) {
             led_strip_set_pixel(debugLed, 0, LED_ARTNET_FRAME);
         }
         led_strip_refresh(debugLed);
-        
-        //Restore changed values
-        for (int i = 0; i < _shuttersCount; i++) {
-            FakeShutter *shutter = &_shutters[i];
-            if (shutter->changed) {
-                shutter->changed = false;
-                for (int j = 0; j < shutter->destValuesCount; j++) {
-                    if (shutter->destValues[j]) *shutter->destValues[j] = shutter->originalValues[j];
-                }
-            }
-        }
+
     } else {
         if(shouldRunTickRes == YES_FRAMERATE) {
             if ((currentTime - _lastPacketOut) > NO_SIGNAL_TIMEOUT) {
                 led_strip_set_pixel(debugLed, 0, LED_ERROR);
                 led_strip_refresh(debugLed);
+            }
+        }
+    }
+
+    //Restore changed values
+    for (int i = 0; i < _shuttersCount; i++) {
+        FakeShutter *shutter = &_shutters[i];
+        if (shutter->changed) {
+            shutter->changed = false;
+            for (int j = 0; j < shutter->destValuesCount; j++) {
+                if (shutter->destValues[j]) *shutter->destValues[j] = shutter->originalValues[j];
             }
         }
     }
