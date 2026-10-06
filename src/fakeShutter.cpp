@@ -106,7 +106,7 @@ static void runShutterTick(void *ctx) {
                         shutter->counter = newCount;
                         shutter->startCounter = newCount;
                     } else { //Rand strobe
-                        int newCount = (esp_random() % (200 - val)) + 1;
+                        int newCount = (esp_random() % (201 - val)) + 2;
                         shutter->counter = newCount;
                         shutter->startCounter = newCount;
                     }
@@ -124,8 +124,9 @@ static void runShutterTick(void *ctx) {
                     //Black out dest values
                     shutter->changed = true;
                     for (int j = 0; j < shutter->destValuesCount; j++) {
+                        if (!shutter->destValues[j]) continue;  // NULL = universe not configured
                         shutter->originalValues[j] = *shutter->destValues[j];
-                        if (shutter->destValues[j]) *shutter->destValues[j] = 0;  // NULL = universe not configured
+                        *shutter->destValues[j] = 0;
                     }
                     //If it's the first tick we're black, set dirty flags
                     if (shutter->counter == shutter->startCounter) {
@@ -179,7 +180,7 @@ static void runShutterTick(void *ctx) {
             if (shutter->changed) {
                 shutter->changed = false;
                 for (int j = 0; j < shutter->destValuesCount; j++) {
-                    *shutter->destValues[j] = shutter->originalValues[j];
+                    if (shutter->destValues[j]) *shutter->destValues[j] = shutter->originalValues[j];
                 }
             }
         }
@@ -388,7 +389,7 @@ void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr
         }
         if (minIndex == -1) break;
         storedUniverses[minIndex] = true;
-        universes[i] = (DmxUniverse*) malloc(sizeof(DmxUniverse));
+        universes[i] = (DmxUniverse*) calloc(1, sizeof(DmxUniverse));
         universes[i]->dirty = false;
         universes[i]->universeId = universesInId[minIndex];
         universes[i]->outAddr = universesOutAddr[minIndex];
