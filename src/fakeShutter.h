@@ -3,7 +3,7 @@
 #include "esp_netif.h"
 #include "lwip/sockets.h"
 
-#define EXTRA_FRAMERATE_WAIT (5 * 1000)
+#define EXTRA_FRAMERATE_WAIT (10 * 1000)
 #define LED_GPIO  21
 #define LED_ARTNET_FRAME 0,15,0
 #define LED_FRAMERATE 0,0,25
