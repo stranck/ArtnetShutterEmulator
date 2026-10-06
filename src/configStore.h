@@ -61,6 +61,7 @@ struct AppConfig {
     NetworkConfig            network;
     int                      framerate;     // frames per second
     uint8_t                  sacnPriority;  // 0..200
+    bool                     doubleOn;      // "force min DMX frame = 2" (setDoubleOn)
     std::vector<UniverseRow> universes;
     std::vector<ShutterRow>  shutters;
 };
@@ -77,7 +78,7 @@ esp_err_t config_load(AppConfig *cfg);
 esp_err_t config_save(const AppConfig *cfg);
 
 // Push the configuration into the running fake shutter engine.
-void config_apply_io(const AppConfig *cfg);        // reallocUniverses + framerate + sACN priority
+void config_apply_io(const AppConfig *cfg);        // reallocUniverses + framerate + sACN priority + doubleOn
 void config_apply_shutters(const AppConfig *cfg);  // reallocShutters
 esp_err_t config_apply_network(const AppConfig *cfg, esp_netif_t *netif);
 

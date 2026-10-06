@@ -38,6 +38,7 @@ void config_defaults(AppConfig *cfg)
     cfg->network.gateway = inet_addr("2.0.1.1");
     cfg->framerate       = 44;
     cfg->sacnPriority    = 100;
+    cfg->doubleOn        = false;
     cfg->universes.clear();
     cfg->shutters.clear();
 }
@@ -154,6 +155,7 @@ cJSON *config_to_json(const AppConfig *cfg)
 
     cJSON_AddNumberToObject(root, "framerate", cfg->framerate);
     cJSON_AddNumberToObject(root, "sacnPriority", cfg->sacnPriority);
+    cJSON_AddBoolToObject(root, "doubleOn", cfg->doubleOn);
 
     cJSON *unis = cJSON_AddArrayToObject(root, "universes");
     for (const UniverseRow &r : cfg->universes) {
@@ -229,6 +231,17 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
     if (!get_int(root, "framerate", 1, CONFIG_MAX_FRAMERATE, &framerate, err, "settings") ||
         !get_int(root, "sacnPriority", 0, 200, &priority, err, "settings")) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    // Optional: configurations saved before this setting existed don't have it
+    bool doubleOn = false;
+    const cJSON *dbl = cJSON_GetObjectItemCaseSensitive(root, "doubleOn");
+    if (dbl) {
+        if (!cJSON_IsBool(dbl)) {
+            err = "settings: \"doubleOn\" must be true or false";
+            return ESP_ERR_INVALID_ARG;
+        }
+        doubleOn = cJSON_IsTrue(dbl);
     }
 
     const cJSON *arr = cJSON_GetObjectItemCaseSensitive(root, "universes");
@@ -308,6 +321,7 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
 
     cfg->framerate = framerate;
     cfg->sacnPriority = priority;
+    cfg->doubleOn = doubleOn;
     cfg->universes = std::move(rows);
     return ESP_OK;
 }
@@ -532,6 +546,7 @@ void config_apply_io(const AppConfig *cfg)
 
     setFramerate(cfg->framerate);
     sacn_set_priority(cfg->sacnPriority);
+    setDoubleOn(cfg->doubleOn);
     reallocUniverses(inIds.get(), outIds.get(), outAddrs.get(), isArtnet.get(), count);
     ESP_LOGI(TAG, "Applied %d universes, %d fps, sACN priority %u",
              count, cfg->framerate, cfg->sacnPriority);

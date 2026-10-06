@@ -114,6 +114,7 @@ td.flag{width:24px;text-align:center}
     <div class="row">
       <label class="f">Output framerate (fps)<input id="ioFramerate" class="n5 mono" type="number" min="1" max="200"></label>
       <label class="f">sACN priority (0–200)<input id="ioPriority" class="n5 mono" type="number" min="0" max="200"></label>
+      <label class="f" style="flex-direction:row;align-items:center;gap:6px;padding-bottom:6px;color:var(--text)"><input type="checkbox" id="ioDoubleOn">Force min DMX frame = 2</label>
       <span class="hint">Framerate limits how often processed universes are sent. sACN priority applies to every sACN output.</span>
     </div>
   </div>
@@ -376,7 +377,7 @@ const ipStr = n => [n >>> 24, (n >>> 16) & 255, (n >>> 8) & 255, n & 255].join("
 // ======================================================================
 const S = {
   saved: null,          // last configuration loaded from / saved to the device
-  io: null,             // { framerate, sacnPriority, universes: [...] }  (editor)
+  io: null,             // { framerate, sacnPriority, doubleOn, universes: [...] }  (editor)
   sh: [],               // [{ name, srcText, dstText }]                    (editor)
   net: null,            // { ip, netmask, gateway }                        (editor)
   sel: new Set(),       // selected shutter indexes
@@ -391,19 +392,19 @@ function shutterFromEditor(r) {
 }
 
 function loadEditors(cfg, which = ["io", "sh", "net"]) {
-  if (which.includes("io")) S.io = { framerate: cfg.framerate, sacnPriority: cfg.sacnPriority, universes: clone(cfg.universes || []) };
+  if (which.includes("io")) S.io = { framerate: cfg.framerate, sacnPriority: cfg.sacnPriority, doubleOn: !!cfg.doubleOn, universes: clone(cfg.universes || []) };
   if (which.includes("sh")) { S.sh = (cfg.shutters || []).map(shutterToEditor); S.sel.clear(); S.anchor = null; }
   if (which.includes("net")) S.net = clone(cfg.network || { ip: "", netmask: "", gateway: "" });
 }
 
 // Payloads exactly as the device API expects them
-const ioPayload = () => ({ framerate: S.io.framerate, sacnPriority: S.io.sacnPriority, universes: S.io.universes });
+const ioPayload = () => ({ framerate: S.io.framerate, sacnPriority: S.io.sacnPriority, doubleOn: S.io.doubleOn, universes: S.io.universes });
 const shPayload = () => ({ shutters: S.sh.map(shutterFromEditor) });
 const netPayload = () => ({ network: { ip: S.net.ip.trim(), netmask: S.net.netmask.trim(), gateway: S.net.gateway.trim() } });
 
 function isDirty(tab) {
   if (!S.saved) return false;
-  if (tab === "io") return JSON.stringify(ioPayload()) !== JSON.stringify({ framerate: S.saved.framerate, sacnPriority: S.saved.sacnPriority, universes: S.saved.universes });
+  if (tab === "io") return JSON.stringify(ioPayload()) !== JSON.stringify({ framerate: S.saved.framerate, sacnPriority: S.saved.sacnPriority, doubleOn: !!S.saved.doubleOn, universes: S.saved.universes });
   if (tab === "shutters") return JSON.stringify(shPayload().shutters) !== JSON.stringify(S.saved.shutters.map(s => ({ name: s.name, src: s.src, dst: s.dst })));
   if (tab === "network") return JSON.stringify(netPayload().network) !== JSON.stringify(S.saved.network);
   return false;
@@ -456,6 +457,7 @@ function ioRowHtml(r, i) {
 function renderIo() {
   $("#ioFramerate").value = S.io.framerate;
   $("#ioPriority").value = S.io.sacnPriority;
+  $("#ioDoubleOn").checked = S.io.doubleOn;
   const tb = $("#ioTable tbody");
   tb.innerHTML = S.io.universes.length
     ? S.io.universes.map(ioRowHtml).join("")
@@ -616,6 +618,7 @@ $("#ioAdd").onclick = () => {
 };
 $("#ioFramerate").oninput = e => { S.io.framerate = readInt(e.target); validateIo(); };
 $("#ioPriority").oninput = e => { S.io.sacnPriority = readInt(e.target); validateIo(); };
+$("#ioDoubleOn").onchange = e => { S.io.doubleOn = e.target.checked; validateIo(); };
 $("#ioRevert").onclick = () => { loadEditors(S.saved, ["io"]); renderIo(); renderShutters(); };
 $("#ioSave").onclick = async () => {
   if (S.ioErrors) return;
@@ -1098,7 +1101,7 @@ window.addEventListener("beforeunload", e => {
     renderAll();
   } catch (e) {
     toast("Cannot load the configuration: " + e.message, true);
-    S.saved = { network: { ip: "", netmask: "", gateway: "" }, framerate: 44, sacnPriority: 100, universes: [], shutters: [] };
+    S.saved = { network: { ip: "", netmask: "", gateway: "" }, framerate: 44, sacnPriority: 100, doubleOn: false, universes: [], shutters: [] };
     loadEditors(S.saved);
     renderAll();
   }
