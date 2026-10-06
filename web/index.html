@@ -340,7 +340,7 @@ function parseChanList(s) {
     } else if (range.length === 2) {
       const a = parseChan(range[0]), b = parseChan(range[1]);
       if (!a || !b || absOf(b) < absOf(a)) return { bad: tok };
-      if (absOf(b) - absOf(a) >= 64) return { bad: tok + " (range too long)" };
+      if (absOf(b) - absOf(a) >= 513) return { bad: tok + " (range too long)" };
       for (let n = absOf(a); n <= absOf(b); n++) list.push(fromAbs(n));
     } else return { bad: tok };
   }
@@ -683,7 +683,7 @@ function validateShutters() {
     else {
       const list = p.dst.list;
       if (list.length === 0) { issues.push(["w", `#${n}: no destinations, this shutter does nothing`, [i]]); rowErr[i].lvl = rowErr[i].lvl || "w"; }
-      if (list.length > 64) { issues.push(["e", `#${n}: ${list.length} destinations (max 64)`, [i]]); rowErr[i].dst = true; }
+      if (list.length > 513) { issues.push(["e", `#${n}: ${list.length} destinations (max 513)`, [i]]); rowErr[i].dst = true; }
       const seen = new Set();
       for (const c of list) {
         const a = absOf(c);

@@ -22,7 +22,7 @@ struct cJSON;
 #define CONFIG_MAX_NAME_LEN     32
 #define CONFIG_MAX_UNIVERSES    256   // after expanding the "count" of every row
 #define CONFIG_MAX_SHUTTERS     1024
-#define CONFIG_MAX_DESTS        64    // destinations per shutter
+#define CONFIG_MAX_DESTS        513    // destinations per shutter
 #define CONFIG_MAX_FRAMERATE    200
 #define CONFIG_ARTNET_MAX_UNI   32767 // 15-bit Port-Address
 #define CONFIG_SACN_MAX_UNI     63999
