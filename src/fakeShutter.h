@@ -61,3 +61,4 @@ void reallocUniverses(uint16_t* universesInId, uint16_t* universesOutId, in_addr
 void reallocShutters(UniverseAddressPair *sourceValues, UniverseAddressPair **destValues, int *destValuesCount, int count);
 
 void setDoubleOn(bool doubleOn);
+void setContinuousTransmission(bool continuousTranmission);

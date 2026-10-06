@@ -39,6 +39,7 @@ void config_defaults(AppConfig *cfg)
     cfg->framerate       = 44;
     cfg->sacnPriority    = 100;
     cfg->doubleOn        = false;
+    cfg->constTrans       = false;
     cfg->universes.clear();
     cfg->shutters.clear();
 }
@@ -156,6 +157,7 @@ cJSON *config_to_json(const AppConfig *cfg)
     cJSON_AddNumberToObject(root, "framerate", cfg->framerate);
     cJSON_AddNumberToObject(root, "sacnPriority", cfg->sacnPriority);
     cJSON_AddBoolToObject(root, "doubleOn", cfg->doubleOn);
+    cJSON_AddBoolToObject(root, "constTrans", cfg->constTrans);
 
     cJSON *unis = cJSON_AddArrayToObject(root, "universes");
     for (const UniverseRow &r : cfg->universes) {
@@ -233,15 +235,27 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
         return ESP_ERR_INVALID_ARG;
     }
 
+    const cJSON *dbl;
     // Optional: configurations saved before this setting existed don't have it
     bool doubleOn = false;
-    const cJSON *dbl = cJSON_GetObjectItemCaseSensitive(root, "doubleOn");
+    dbl = cJSON_GetObjectItemCaseSensitive(root, "doubleOn");
     if (dbl) {
         if (!cJSON_IsBool(dbl)) {
             err = "settings: \"doubleOn\" must be true or false";
             return ESP_ERR_INVALID_ARG;
         }
         doubleOn = cJSON_IsTrue(dbl);
+    }
+
+    // Optional: configurations saved before this setting existed don't have it
+    bool constTrans = false;
+    dbl = cJSON_GetObjectItemCaseSensitive(root, "constTrans");
+    if (dbl) {
+        if (!cJSON_IsBool(dbl)) {
+            err = "settings: \"constTrans\" must be true or false";
+            return ESP_ERR_INVALID_ARG;
+        }
+        constTrans = cJSON_IsTrue(dbl);
     }
 
     const cJSON *arr = cJSON_GetObjectItemCaseSensitive(root, "universes");
@@ -322,6 +336,7 @@ esp_err_t config_parse_io(const cJSON *root, AppConfig *cfg, std::string &err)
     cfg->framerate = framerate;
     cfg->sacnPriority = priority;
     cfg->doubleOn = doubleOn;
+    cfg->constTrans = constTrans;
     cfg->universes = std::move(rows);
     return ESP_OK;
 }
@@ -547,6 +562,7 @@ void config_apply_io(const AppConfig *cfg)
     setFramerate(cfg->framerate);
     sacn_set_priority(cfg->sacnPriority);
     setDoubleOn(cfg->doubleOn);
+    setContinuousTransmission(cfg->constTrans);
     reallocUniverses(inIds.get(), outIds.get(), outAddrs.get(), isArtnet.get(), count);
     ESP_LOGI(TAG, "Applied %d universes, %d fps, sACN priority %u",
              count, cfg->framerate, cfg->sacnPriority);
